@@ -23,6 +23,7 @@ import LandmarkRenderer, { createLandmarkAssets } from './landmarks/LandmarkRend
 import { warmupLandmarkPipelines } from './landmarks/LandmarkPipelineWarmup.js'
 import { getLandmarkSettings } from './landmarks/landmarkConfig.js'
 import PlayerAircraft from './player/PlayerAircraft.js'
+import Combat from '../systems/Combat.js'
 import { warmupPrefabPipelines } from './prefabs/PrefabPipelineWarmup.js'
 import PrefabPlacer from './prefabs/PrefabPlacer.js'
 import PrefabRegistry from './prefabs/PrefabRegistry.js'
@@ -64,6 +65,7 @@ export default class World {
     this.prefabRegistry = null
     this.prefabShadowBounds = null
     this.playerAircraft = null
+    this.combat = null
     this.terrainChunkManager = null
     this.prefabWarmup = null
     this.landmarkAssets = null
@@ -182,6 +184,9 @@ export default class World {
 
       this.playerAircraft = new PlayerAircraft(this.experience, { config: this.config })
       this.addSystem(this.playerAircraft)
+
+      this.combat = new Combat(this.experience, { config: this.config.player?.aircraft?.combat })
+      this.addSystem(this.combat)
     }
 
     this.regenerate()
@@ -466,6 +471,7 @@ export default class World {
     this.lavaBrickRenderer = null
     this.prefabPlacer = null
     this.playerAircraft = null
+    this.combat = null
     this.prefabRegistry = null
     this.children.length = 0
     this.group.clear()
