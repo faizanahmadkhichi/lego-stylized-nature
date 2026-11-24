@@ -182,6 +182,8 @@ export default class Combat {
       bolt.position.addScaledVector(bolt.velocity, delta)
     }
 
+    this._checkHits()
+
     let index = 0
     for (const bolt of this.bolts) {
       if (!bolt.alive) {
@@ -191,6 +193,46 @@ export default class Combat {
       index++
     }
     this.field.setCount(index)
+  }
+
+  /** Sphere-vs-sphere bolt/target hits. One bolt hits at most one target. */
+  _checkHits() {
+    const targets = this.experience.world?.targets
+    if (!targets?.enabled) {
+      return
+    }
+    const alive = targets.aliveTargets
+    if (alive.length === 0) {
+      return
+    }
+    const scoring = this.experience.world?.scoring
+    for (const bolt of this.bolts) {
+      if (!bolt.alive) {
+        continue
+      }
+      for (const target of alive) {
+        if (!target.alive) {
+          continue
+        }
+        // The bolt is 3 units long; treat its hitbox generously so hits feel fair.
+        const hitDistance = target.hitRadius + 1.2
+        if (bolt.position.distanceToSquared(target.position) > hitDistance * hitDistance) {
+          continue
+        }
+        bolt.alive = false
+        const result = targets.damage(target, 1)
+        if (result === 'hit') {
+          this.experience.audio?.play('hit')
+        }
+        else if (result === 'destroyed') {
+          this.experience.audio?.play('explosion')
+          const reward = scoring?.addKill(target.type)
+          const comboText = reward && reward.combo > 1 ? ` (x${reward.combo} combo)` : ''
+          this.experience.ui?.toast(`+${reward?.points ?? 0} — ${target.type} destroyed!${comboText}`)
+        }
+        break
+      }
+    }
   }
 
   dispose() {
