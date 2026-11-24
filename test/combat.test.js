@@ -176,3 +176,79 @@ test('normalizeCombatConfig applies defaults and clamps', () => {
   assert.equal(normalizeCombatConfig({ boltCount: 0 }).boltCount, 1)
   assert.equal(normalizeCombatConfig({ enabled: false }).enabled, false)
 })
+
+test('a bolt destroys a balloon and scores', async () => {
+  const { default: Targets } = await import('../src/systems/Targets.js')
+  const { default: Scoring } = await import('../src/systems/Scoring.js')
+  const time = {
+    elapsed: 0,
+    delta: 1 / 60,
+    getElapsed() {
+      return this.elapsed
+    },
+    getDelta() {
+      return this.delta
+    },
+  }
+  const toasts = []
+  const played = []
+  const experience = {
+    config: {
+      seed: 7,
+      targets: { drones: 0, balloons: 1, balloonDrift: 0, respawnDelay: 100 },
+      scoring: {},
+    },
+    time,
+    audio: {
+      play(name) {
+        played.push(name)
+        return true
+      },
+    },
+    ui: {
+      toast(message) {
+        toasts.push(message)
+      },
+    },
+    world: {
+      playerAircraft: {
+        enabled: true,
+        paused: false,
+        state: {
+          position: new THREE.Vector3(0, 5.5, 0),
+          yaw: 0,
+          velocity: new THREE.Vector3(0, 0, 0),
+        },
+        input: {
+          getKeys() {
+            return { Space: false }
+          },
+        },
+      },
+    },
+  }
+  const scoring = new Scoring(experience)
+  const targets = new Targets(experience)
+  const combat = new Combat(experience, { config: { burstCount: 1, fireRate: 10 } })
+  experience.world.scoring = scoring
+  experience.world.targets = targets
+
+  // Park the balloon dead ahead of the plane.
+  const balloon = targets.targets[0]
+  balloon.center.set(10, 5.5, 0)
+  balloon.position.set(10, 5.5, 0)
+  balloon.previousPosition.set(10, 5.5, 0)
+
+  combat.tryFire()
+  // The bolt needs ~0.16s to reach the balloon; run 30 frames.
+  for (let i = 0; i < 30; i++) {
+    time.elapsed += time.delta
+    targets.update()
+    combat.update()
+  }
+  assert.equal(balloon.alive, false)
+  assert.equal(scoring.score, 50)
+  assert.ok(played.includes('explosion'))
+  assert.equal(toasts.length, 1)
+  assert.match(toasts[0], /\+50 — balloon destroyed!/)
+})
