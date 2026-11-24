@@ -55,6 +55,7 @@ export default class ExplorerUI {
         </div>
         <div class="header-tools">
           <span class="explore-badge hud-part"><i></i><span data-flight-status>Free Exploration</span></span>
+          <span class="score-badge hud-part"><i></i><span data-score>Score 0</span></span>
           <nav class="surface action-bar" aria-label="Exploration tools">
             ${button('pause', 'pause', 'Pause flight (P)', 'aria-pressed="false" disabled')}
             ${button('home', 'home', 'Return to start', 'disabled')}
@@ -116,6 +117,7 @@ export default class ExplorerUI {
     this.speed = root.querySelector('[data-speed]')
     this.speedBar = root.querySelector('[data-speed-bar]')
     this.biome = root.querySelector('[data-biome]')
+    this.score = root.querySelector('[data-score]')
     this.x = root.querySelector('[data-x]')
     this.z = root.querySelector('[data-z]')
     this.dialog = root.querySelector('dialog')
@@ -288,6 +290,11 @@ export default class ExplorerUI {
     const speed = player.paused ? 0 : player.state.velocity.length()
     this.speed.textContent = (speed / cellSize).toFixed(1)
     this.speedBar.style.width = `${Math.min(100, speed / player.motionConfig.maxSpeed * 100)}%`
+    const scoring = this.experience.world.scoring
+    if (scoring && this.score) {
+      const comboText = scoring.combo > 1 ? ` · x${scoring.combo}` : ''
+      this.score.textContent = `Score ${scoring.score}${comboText}`
+    }
     this.x.textContent = String(Math.floor(player.state.position.x / cellSize)).padStart(4, '0')
     this.z.textContent = String(Math.floor(player.state.position.z / cellSize)).padStart(4, '0')
     this.minimap.update()
