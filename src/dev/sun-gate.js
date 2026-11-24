@@ -13,7 +13,7 @@ try {
   const chunk = { x: 1, z: 5 }
   const slot = manager.loadCoordNow(chunk)
   const site = slot.terrainMap.landmarks?.[0]
-  if (!site) throw new Error('当前种子的预览地标选址不可用')
+  if (!site) throw new Error('No preview landmark site is available for the current seed')
   player.state.position.set(site.worldX, player.motionConfig.height, site.worldZ + 6)
   player.state.velocity.set(0, 0, 0)
   player.state.yaw = -Math.PI / 2
@@ -50,7 +50,7 @@ try {
     ui.flightPaused = !ui.flightPaused
     player.cameraFollow.enabled = !ui.flightPaused
     ui.syncPause()
-    fly.textContent = ui.flightPaused ? '开始飞行' : '暂停飞行'
+    fly.textContent = ui.flightPaused ? 'Start flying' : 'Pause flight'
   })
   let disposed = false
   const frameTimes = []
@@ -60,7 +60,7 @@ try {
   const check = (time) => {
     if (disposed) return
     const reveal = liveSlot.landmarkRenderer
-    status.textContent = liveSlot.columnTransition?.active ? '地形逐列升起' : reveal.progress < 1 ? '日轮门正在显现' : '日轮门已就绪 · 开始飞行后镜头自动跟随'
+    status.textContent = liveSlot.columnTransition?.active ? 'Terrain rising column by column' : reveal.progress < 1 ? 'Sun Gate appearing' : 'Sun Gate ready · The camera follows automatically once you start flying'
     if (previous && time - previous < 500) frameTimes.push(time - previous)
     previous = time
     if (frameTimes.length > 300) frameTimes.shift()
@@ -69,13 +69,13 @@ try {
       const preparation = experience.renderer.prefabPreparation?.metrics
       maximumPreparation = Math.max(maximumPreparation, preparation?.maxSliceMs ?? 0)
       document.querySelector('#visit-metrics').textContent = [
-        `区块 ${chunk.x}, ${chunk.z} · 世界 ${site.worldX.toFixed(1)}, ${site.worldZ.toFixed(1)}`,
-        `建筑高度 ${world.config.landmarks.targetHeight} · 模型 5,580 三角面`,
-        `基础 Y ${site.baseY.toFixed(3)} · 平台高 ${site.terraceHeight} 层`,
-        `预分配模型网格 ${manager.slots.reduce((n, s) => n + (s.landmarkRenderer?.meshes.length ?? 0), 0)}`,
-        `P95 帧间隔 ${(sorted[Math.floor(sorted.length * 0.95)] ?? 0).toFixed(1)} ms`,
-        `准备队列 ${preparation?.pending ?? 0} · 失败 ${preparation?.failed ?? 0}`,
-        `准备最长切片 ${maximumPreparation.toFixed(1)} ms`,
+        `Chunk ${chunk.x}, ${chunk.z} · World ${site.worldX.toFixed(1)}, ${site.worldZ.toFixed(1)}`,
+        `Building height ${world.config.landmarks.targetHeight} · Model 5,580 triangles`,
+        `Base Y ${site.baseY.toFixed(3)} · Platform ${site.terraceHeight} layers high`,
+        `Preallocated model meshes ${manager.slots.reduce((n, s) => n + (s.landmarkRenderer?.meshes.length ?? 0), 0)}`,
+        `P95 frame interval ${(sorted[Math.floor(sorted.length * 0.95)] ?? 0).toFixed(1)} ms`,
+        `Preparation queue ${preparation?.pending ?? 0} · Failed ${preparation?.failed ?? 0}`,
+        `Longest preparation slice ${maximumPreparation.toFixed(1)} ms`,
       ].join('\n')
       lastMetrics = time
     }
@@ -85,7 +85,7 @@ try {
   window.addEventListener('pagehide', () => { disposed = true; experience.dispose() }, { once: true })
 }
 catch (error) {
-  status.textContent = `实景加载失败：${error.message}`
+  status.textContent = `Live scene failed to load: ${error.message}`
   console.error(error)
   experience.dispose()
 }
