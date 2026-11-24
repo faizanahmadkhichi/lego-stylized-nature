@@ -1,6 +1,6 @@
 ---
 name: ChunkManager 3x3
-overview: 将现有 2-slot `TerrainChunkPingPong` 升级为完整 `ChunkManager`，保持玩家所在 chunk 周围 3×3 active window 常驻，并复用 `ChunkRenderSlot` 避免 GPU 资源反复创建销毁。
+overview: Upgrade the existing 2-slot `TerrainChunkPingPong` to a full `ChunkManager`, keeping a 3×3 active window around the player's chunk resident at all times, and reuse `ChunkRenderSlot` to avoid repeatedly creating and destroying GPU resources.
 todos:
   - id: coord-window
     content: Add 3×3 chunk window coordinate helper and tests
@@ -17,83 +17,83 @@ todos:
 isProject: false
 ---
 
-# 3×3 ChunkManager 设计确认
+# 3×3 ChunkManager Design Confirmation
 
-## 问题理解
-当前实现是 `TerrainChunkPingPong`：只有 active slot 和 standby slot。它适合验证“跨边界前预生成一个目标 chunk”，但本质上只能服务一个预测方向。玩家如果斜向移动、贴角移动、快速转向，或者相机能看到当前 chunk 外的一圈区域，2-slot 都可能出现临时空窗或同步生成压力。
+## Problem Understanding
+The current implementation is `TerrainChunkPingPong`: only an active slot and a standby slot. It works for verifying "pre-generate one target chunk before crossing a boundary", but it can fundamentally only serve one predicted direction. If the player moves diagonally, hugs a corner, turns quickly, or the camera can see a ring of area outside the current chunk, the 2-slot setup can show temporary gaps or synchronous generation pressure.
 
-假设：
-- 继续保持 chunk-local 渲染：每个 `ChunkRenderSlot` 内部只画自己的 terrain/water/lava/prefab。
-- 继续复用 slot 内部的 `InstancedMesh` 和 prefab buckets。
-- 不做无限远缓存，也不做复杂 LOD；这一步只解决玩家周围稳定加载范围。
+Assumptions:
+- Keep chunk-local rendering: each `ChunkRenderSlot` only draws its own terrain/water/lava/prefab.
+- Keep reusing the slot-internal `InstancedMesh` and prefab buckets.
+- No infinite-distance caching and no complex LOD; this step only solves the stable loading range around the player.
 
-## 为什么选择 3×3 Active Window
-3×3 是二维移动里“当前 chunk + 四边邻居 + 四个角邻居”的最小完整邻域。
+## Why a 3×3 Active Window
+3×3 is the smallest complete neighborhood in 2D movement: "current chunk + four edge neighbors + four corner neighbors".
 
-它比 2-slot 稳定，因为：
-- 横向、纵向、斜向移动都已有目标 chunk。
-- 玩家站在 chunk 角附近时，四个可能方向都不会依赖临时预测。
-- 相机跟随飞机时，视野通常不只覆盖当前 chunk；周围一圈能避免边缘突然生成。
-- 资源上限固定为 9 个 slot，仍然简单可控。
+It is more stable than 2-slot because:
+- Horizontal, vertical, and diagonal moves already have their target chunk.
+- When the player stands near a chunk corner, none of the four possible directions depends on a temporary prediction.
+- When the camera follows the plane, the view usually covers more than the current chunk; the surrounding ring avoids sudden generation at the edges.
+- The resource cap is fixed at 9 slots, still simple and controllable.
 
-它比 5×5 更合适作为下一步，因为：
-- 9 个 chunk 已经能覆盖“当前邻域”的核心问题。
-- 25 个 chunk 会把 terrain、water、lava、prefab 实例容量同时放大，当前还没有性能数据支持。
-- 3×3 的管理逻辑足够暴露 ChunkManager 需要的生命周期问题，但不会一次引入 LOD、远距离卸载、异步任务队列等复杂度。
+It is a better next step than 5×5 because:
+- 9 chunks already cover the core problem of the "current neighborhood".
+- 25 chunks would scale terrain, water, lava, and prefab instance capacity all at once, and there is no performance data yet to support that.
+- The 3×3 management logic is enough to expose the lifecycle problems a ChunkManager needs, without introducing LOD, long-distance unloading, async task queues, and other complexity all at once.
 
-## 推荐方案
-新增 `ChunkManager`，替代 `TerrainChunkPingPong` 的职责。`ChunkRenderSlot` 保持不变，继续作为单个 chunk 的渲染容器。
+## Recommended Approach
+Add a new `ChunkManager` to take over `TerrainChunkPingPong`'s responsibilities. `ChunkRenderSlot` stays unchanged and continues as the render container for a single chunk.
 
-核心职责：
-- 根据玩家位置计算 center chunk。
-- 计算 center 周围 radius=1 的 3×3 required coords。
-- 保留仍在 required coords 内的 slot。
-- 从空闲 slot 池中拿 slot 填充新增 coords。
-- 超出窗口的 slot 隐藏并放回空闲池，等待复用。
-- 对外提供和当前类似的 `bootstrap()`、`update()`、`refreshAOPreview()`、`getDebugMaterials()`、`dispose()`。
+Core responsibilities:
+- Compute the center chunk from the player position.
+- Compute the 3×3 required coords around the center with radius=1.
+- Keep slots that are still inside the required coords.
+- Take slots from the free slot pool to fill newly added coords.
+- Hide slots that fall outside the window and return them to the free pool for reuse.
+- Expose APIs similar to the current ones: `bootstrap()`, `update()`, `refreshAOPreview()`, `getDebugMaterials()`, `dispose()`.
 
-数据结构：
-- `activeSlots: Map<chunkKey, ChunkRenderSlot>`：当前 3×3 可见 slot。
-- `freeSlots: ChunkRenderSlot[]`：可复用但当前不显示的 slot。
-- `slots: ChunkRenderSlot[]`：固定创建 9 个 slot。
-- `centerCoord`：玩家当前所在 chunk。
+Data structures:
+- `activeSlots: Map<chunkKey, ChunkRenderSlot>`: the currently visible 3×3 slots.
+- `freeSlots: ChunkRenderSlot[]`: reusable slots that are currently hidden.
+- `slots: ChunkRenderSlot[]`: 9 fixed slots created up front.
+- `centerCoord`: the chunk the player is currently in.
 
-## Slot 规格与资源预算
-当前配置是 `chunks.size: 72`、`chunks.halo: 1`、`terrain.cellSize: 0.2`。
+## Slot Spec and Resource Budget
+The current config is `chunks.size: 72`, `chunks.halo: 1`, `terrain.cellSize: 0.2`.
 
-单个 `ChunkRenderSlot` 的规格：
-- 可见逻辑尺寸：`72 × 72` terrain cells，即 `5184` 个地表采样格。
-- 采样尺寸：`(72 + halo * 2) × (72 + halo * 2)`，当前是 `74 × 74`。halo 只用于高度、法线感、AO、邻居高度、边缘衔接等采样，不直接渲染成可见 chunk 宽度。
-- 世界尺寸：`72 * 0.2 = 14.4` world units，所以 3×3 active window 覆盖约 `43.2 × 43.2` world units。
-- 每个 slot 包含一整套 renderer：terrain、water、lava、prefab placer、heightfield AO。
+Spec for a single `ChunkRenderSlot`:
+- Visible logical size: `72 × 72` terrain cells, i.e. `5184` surface sample cells.
+- Sampling size: `(72 + halo * 2) × (72 + halo * 2)`, currently `74 × 74`. The halo is only used for sampling height, normal feel, AO, neighbor heights, edge blending, etc.; it is not rendered as visible chunk width.
+- World size: `72 * 0.2 = 14.4` world units, so the 3×3 active window covers about `43.2 × 43.2` world units.
+- Each slot contains a full set of renderers: terrain, water, lava, prefab placer, heightfield AO.
 
-3×3 active window 的固定上限：
-- slot 数：`9`，不随移动增长。
-- 可见地表格：`9 * 5184 = 46656` cells。
-- 采样图总量：`9 * 74 * 74 = 49284` samples。
-- terrain 实例数：由 `LayeredTerrainBuilder.buildPlacements()` 动态决定，受地形高度、邻居暴露面、水和 lava 挖空影响。它不是固定 `cells * maxHeight`，但最坏成本与 chunk 面积和垂直暴露层数相关。
-- water/lava 实例数：每 slot 动态扩容，容量按当前 chunk 实际 water/lava cell 数的 `1.2` 倍增长并复用。
-- prefab 实例数：每 slot、每 prefab bucket 固定容量，见下一节。
+Fixed caps for the 3×3 active window:
+- Slot count: `9`, does not grow with movement.
+- Visible surface cells: `9 * 5184 = 46656` cells.
+- Total sample maps: `9 * 74 * 74 = 49284` samples.
+- Terrain instance count: decided dynamically by `LayeredTerrainBuilder.buildPlacements()`, affected by terrain height, exposed neighbor faces, and water/lava carving. It is not a fixed `cells * maxHeight`, but worst-case cost relates to chunk area and vertically exposed layers.
+- Water/lava instance count: grows dynamically per slot, with capacity growing to `1.2`× the current chunk's actual water/lava cell count and reused.
+- Prefab instance count: fixed capacity per slot, per prefab bucket — see the next section.
 
-这个规格意味着 3×3 不是只把 terrain 乘 9，而是把 terrain、water、lava、AO、prefab bucket 都乘到最多 9 份。因此实现时必须避免每次移动创建新 renderer；只能重填复用的 9 个 slot。
+This spec means 3×3 does not just multiply terrain by 9; it multiplies terrain, water, lava, AO, and prefab buckets to at most 9 copies each. So the implementation must avoid creating new renderers on every move; it can only refill the 9 reused slots.
 
-## Prefab Capacity 策略
-当前 `PrefabPlacer` 的 `prefabCapacity` 是 `getPrefabCapacity(prefabEntry)` 返回的每个 category 容量，并在 `fillTransformBucket()` 中用于单个 `InstancedMesh` bucket：
+## Prefab Capacity Strategy
+The current `PrefabPlacer`'s `prefabCapacity` is the per-category capacity returned by `getPrefabCapacity(prefabEntry)`, used in `fillTransformBucket()` for a single `InstancedMesh` bucket:
 
 ```81:86:src/world/prefabs/PrefabPlacer.js
 const capacity = this.getPrefabCapacity(prefabEntry)
 const instanceCount = Math.min(transforms.length, capacity)
 ```
 
-在 chunk 架构下，每个 `ChunkRenderSlot` 都有自己的 `PrefabPlacer`。因此 `prefabCapacity` 的实际含义应明确为：
+Under the chunk architecture, each `ChunkRenderSlot` has its own `PrefabPlacer`. So the actual meaning of `prefabCapacity` should be made explicit:
 
-- 不是全世界容量。
-- 不是整个 3×3 window 共享容量。
-- 是“单个 slot 内，单个 prefab category/bucket 的容量上限”。
+- It is not a whole-world capacity.
+- It is not a capacity shared across the whole 3×3 window.
+- It is "the capacity cap for a single prefab category/bucket inside a single slot".
 
-所以不应该因为 9 slots 就把 `prefabCapacity` 简单乘以 9。那会把单窗口最坏 GPU instance buffer 放大到 `9 × 新容量`，很容易过量。
+So `prefabCapacity` should not simply be multiplied by 9 just because there are 9 slots. That would inflate the single-window worst-case GPU instance buffer to `9 × new capacity`, which easily becomes excessive.
 
-推荐先保持当前数值不变，把它解释为 per-slot cap：
+Recommendation: keep the current values unchanged for now and interpret them as per-slot caps:
 - `tree: 128`
 - `flora: 512`
 - `rock: 256`
@@ -102,30 +102,30 @@ const instanceCount = Math.min(transforms.length, capacity)
 - `waterPlant: 64`
 - `prop: 64`
 
-理由：
-- 当前一个 slot 是 `72 × 72 = 5184` cells，小于旧静态世界 `128 × 128 = 16384` cells。
-- 9 个 slot 的总覆盖面积更大，但每个 slot 独立裁剪，单 slot bucket 不需要装下整个窗口的实例。
-- `PrefabPlacer` 已经有 overflow warning；如果某类 prefab 在单 chunk 内溢出，应调该 category 的 per-slot cap，而不是按 active window 统一放大。
+Reasons:
+- One slot is currently `72 × 72 = 5184` cells, smaller than the old static world of `128 × 128 = 16384` cells.
+- The 9 slots cover a larger total area, but each slot is clipped independently; a single slot's bucket does not need to hold the whole window's instances.
+- `PrefabPlacer` already has an overflow warning; if a prefab category overflows within a single chunk, tune that category's per-slot cap instead of scaling everything by the active window.
 
-需要新增测试和诊断：
-- 测试 `prefabCapacity` 在 `ChunkManager` 下仍是 per-slot cap。
-- 测试 9 slots 中每个 slot 的 bucket 独立计数，不共享、不串块。
-- 保留 overflow warning，用它作为后续调参依据。
-- 如果调试时发现 flora 高频溢出，优先只提高 `flora` 的 per-slot cap；不要改 `tree/rock/prop`。
+New tests and diagnostics needed:
+- Test that `prefabCapacity` is still a per-slot cap under `ChunkManager`.
+- Test that each of the 9 slots counts its buckets independently — no sharing, no cross-talk.
+- Keep the overflow warning and use it as the basis for later tuning.
+- If debugging shows frequent flora overflow, raise only `flora`'s per-slot cap first; do not change `tree/rock/prop`.
 
-## Terrain / Water / Lava Capacity 策略
-terrain、水、lava 当前不是配置固定 cap，而是 renderer 在 `build()` 时按实际实例数扩容到 `ceil(count * 1.2)` 并复用 mesh。
+## Terrain / Water / Lava Capacity Strategy
+Terrain, water, and lava currently have no configured fixed cap; instead the renderer grows during `build()` to `ceil(count * 1.2)` based on the actual instance count and reuses the mesh.
 
-在 3×3 中推荐保持这个策略：
-- 每个 slot 初次填充时按自己的实际实例数创建 mesh。
-- 后续同一个 slot 被复用到新 coord，如果新 count 小于等于历史 capacity，只更新 `mesh.count` 和 instance matrix。
-- 如果新 count 超过历史 capacity，只扩容该 slot 的该 renderer，不影响其他 8 个 slot。
+Keep this strategy for 3×3:
+- Each slot creates its mesh on first fill based on its own actual instance count.
+- When the same slot is later reused for a new coord, if the new count is less than or equal to the historical capacity, only update `mesh.count` and the instance matrix.
+- If the new count exceeds the historical capacity, grow only that slot's renderer; the other 8 slots are unaffected.
 
-这比预先给 terrain/water/lava 配全局固定容量简单，也更符合当前代码。
+This is simpler than pre-assigning a global fixed capacity to terrain/water/lava, and it matches the current code better.
 
-需要注意：3×3 bootstrap 会一次生成 9 个 chunk，首次成本明显高于 2-slot。为了先保持实现简单，这一版仍同步生成；如果浏览器实测卡顿，再加分帧填充或优先中心 chunk。
+One thing to note: 3×3 bootstrap generates 9 chunks at once, so the first-run cost is clearly higher than 2-slot. To keep this version simple, generation stays synchronous; if real browser testing shows stutter, add frame-sliced filling or center-chunk-first priority later.
 
-数据流：
+Data flow:
 ```mermaid
 flowchart TD
   playerPosition["Player position"] --> worldBlock["World block coord"]
