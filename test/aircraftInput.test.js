@@ -36,7 +36,8 @@ test('tracks WASD and arrow key state and ignores unrelated keys', () => {
     ArrowUp: false,
     ArrowDown: false,
     ArrowLeft: false,
-    ArrowRight: true
+    ArrowRight: true,
+    Space: true
   })
 
   input.handleKeyUp({ code: 'KeyW' })
@@ -73,7 +74,8 @@ test('blur clears all key state', () => {
     ArrowUp: false,
     ArrowDown: false,
     ArrowLeft: false,
-    ArrowRight: false
+    ArrowRight: false,
+    Space: false
   })
 })
 
@@ -110,6 +112,7 @@ test('attach is safe when no target is available', () => {
     ArrowUp: false,
     ArrowDown: false,
     ArrowLeft: false,
-    ArrowRight: false
+    ArrowRight: false,
+    Space: false
   })
 })
