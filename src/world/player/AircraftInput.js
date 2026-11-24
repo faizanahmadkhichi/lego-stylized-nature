@@ -7,6 +7,7 @@ const CONTROL_CODES = [
   'ArrowDown',
   'ArrowLeft',
   'ArrowRight',
+  'Space',
 ]
 
 function createEmptyKeys() {
@@ -41,6 +42,10 @@ export default class AircraftInput {
   }
 
   handleKeyDown(event) {
+    // Space scrolls the page by default; the plane fires with it instead.
+    if (event.code === 'Space') {
+      event.preventDefault?.()
+    }
     if (event.repeat === true || !CONTROL_CODES.includes(event.code)) {
       return
     }
