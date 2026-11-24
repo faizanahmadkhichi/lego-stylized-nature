@@ -3,6 +3,11 @@ const clamp01 = value => Math.min(1, Math.max(0, Number.isFinite(value) ? value 
 const CUES = {
   click: [{ frequency: 880, endFrequency: 620, duration: 0.065, gain: 0.07, type: 'triangle' }],
   shoot: [{ frequency: 620, endFrequency: 180, duration: 0.09, gain: 0.06, type: 'square' }],
+  hit: [{ frequency: 1200, endFrequency: 900, duration: 0.05, gain: 0.05, type: 'square' }],
+  explosion: [
+    { frequency: 220, endFrequency: 40, duration: 0.35, gain: 0.12, type: 'sawtooth' },
+    { frequency: 880, endFrequency: 220, duration: 0.15, gain: 0.05, type: 'triangle' },
+  ],
   pause: [
     { frequency: 523.25, duration: 0.15, gain: 0.06 },
     { frequency: 392, offset: 0.075, duration: 0.19, gain: 0.055 },
