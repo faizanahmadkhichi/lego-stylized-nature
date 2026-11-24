@@ -186,18 +186,26 @@ export const worldConfig = {
       },
       combat: {
         enabled: true,
-        /** Shots per second while Space is held. */
+        /** Bursts per second while Space is held. */
         fireRate: 3,
+        /** Bolts fired per burst. */
+        burstCount: 3,
+        /** Seconds between bolts inside one burst. */
+        burstInterval: 0.06,
+        /** Lateral offset between bolts in a burst, in world units. */
+        burstSpread: 0.22,
         /** Bolt speed in world units per second (plus the plane's velocity). */
-        boltSpeed: 30,
-        /** Seconds before a bolt expires. */
-        boltLife: 2,
+        boltSpeed: 60,
+        /** Seconds before a bolt expires; speed x life = range to the horizon. */
+        boltLife: 5,
         /** Bolt pool size; extra shots are dropped when the pool is full. */
-        boltCount: 64,
-        /** Bolt length in world units (a small glowing brick). */
-        boltSize: 0.35,
+        boltCount: 96,
+        /** Tracer length in world units (a long glowing streak). */
+        boltLength: 3,
+        /** Tracer thickness in world units. */
+        boltWidth: 0.12,
         /** World units ahead of the plane center where bolts spawn. */
-        noseOffset: 1.2,
+        noseOffset: 0.6,
       },
     },
   },
