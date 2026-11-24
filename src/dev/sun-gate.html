@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>沙漠日轮门 · 积木旷野实景</title>
+  <title>Desert Sun Gate · BRICKLAND Live Scene</title>
   <link rel="stylesheet" href="/style.css">
   <style>
     .visit-tools { position: fixed; z-index: 25; top: 24px; left: 50%; transform: translateX(-50%); padding: 12px 18px; border-radius: 22px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100vw - 48px); color: #365445; }
@@ -19,17 +19,17 @@
   </style>
 </head>
 <body>
-  <canvas class="webgl" aria-label="沙漠日轮门实景，使用键盘或触屏摇杆驾驶" tabindex="0"></canvas>
+  <canvas class="webgl" aria-label="Desert Sun Gate live scene — fly with keyboard or touch joystick" tabindex="0"></canvas>
   <div id="explorer-ui"></div>
-  <nav class="visit-tools surface" aria-label="日轮门实景预览">
-    <h1>沙漠日轮门</h1>
-    <button id="replay-gate" disabled>重播入场</button>
-    <button id="fly-gate" disabled>开始飞行</button>
-    <button id="clean-view" disabled>纯净视图</button>
-    <a href="/">返回出发地</a>
-    <span id="visit-status" role="status">正在前往沙漠…</span>
+  <nav class="visit-tools surface" aria-label="Sun Gate live scene preview">
+    <h1>Desert Sun Gate</h1>
+    <button id="replay-gate" disabled>Replay entrance</button>
+    <button id="fly-gate" disabled>Start flying</button>
+    <button id="clean-view" disabled>Clean view</button>
+    <a href="/">Back to start</a>
+    <span id="visit-status" role="status">Heading to the desert…</span>
   </nav>
-  <details class="visit-checks surface"><summary>查看运行检查</summary><pre id="visit-metrics">等待世界就绪</pre></details>
+  <details class="visit-checks surface"><summary>View runtime checks</summary><pre id="visit-metrics">Waiting for the world to be ready</pre></details>
   <script type="module" src="/dev/sun-gate.js"></script>
 </body>
 </html>
