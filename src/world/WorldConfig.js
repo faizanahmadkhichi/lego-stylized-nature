@@ -93,6 +93,37 @@ export const worldConfig = {
     /** World-unit gap between adjacent chunks. */
     debugSpacing: 0,
   },
+  targets: {
+    enabled: true,
+    /** Moving targets to shoot at. */
+    drones: 8,
+    balloons: 6,
+    /** Annulus around the spawn point where targets first appear. */
+    spawnRadiusMin: 20,
+    spawnRadiusMax: 70,
+    /** Flight height of the targets (same band the plane flies in). */
+    height: 5.5,
+    heightVariance: 2,
+    droneHp: 1,
+    balloonHp: 1,
+    /** Seconds before a destroyed target respawns near the player. */
+    respawnDelay: 5,
+    droneHitRadius: 1.2,
+    balloonHitRadius: 1.0,
+    /** Angular speed of the drones' circle paths (radians/second). */
+    droneSpeed: 0.5,
+    /** How far balloons drift from their center. */
+    balloonDrift: 3,
+    /** Explosion particle count per destroyed target. */
+    explosionParticles: 14,
+  },
+  scoring: {
+    drone: 100,
+    balloon: 50,
+    /** Seconds between kills to keep the combo alive. */
+    comboWindow: 5,
+    maxCombo: 5,
+  },
   player: {
     aircraft: {
       enabled: true,
