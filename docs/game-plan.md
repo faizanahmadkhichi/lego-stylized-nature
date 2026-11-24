@@ -76,11 +76,12 @@ before takeoff; Free Flight stays the default.
 
 ### 5.1 Combat — Firing from the plane
 - **What:** the plane fires brick bolts straight ahead. Press **Space** (or
-  tap the fire button on touch) to shoot. Bolts are small glowing bricks,
-  fired from the nose, travelling fast in the flight direction.
-- **Fire rate:** 3 shots/second, with a short cooldown. Unlimited ammo —
-  no reloading, so the fun never stops. A tiny muzzle flash + recoil kick
-  on the plane sells each shot.
+  tap the fire button on touch) to shoot. Each trigger fires a **burst of 3
+  long glowing tracers** with a slight fan spread, starting right at the
+  plane's nose and racing to the horizon (speed 60, 5s life = 300 units of
+  range).
+- **Fire rate:** 3 bursts/second. Unlimited ammo — no reloading, so the fun
+  never stops. A tiny muzzle flash + recoil kick on the plane sells each shot.
 - **Hit detection:** sphere-vs-sphere per frame (bolt position vs target
   position). Cheap and exact enough for this game — no physics engine needed.
 - **Files:** new `src/systems/Combat.js` (fire input, bolt pool, hit
