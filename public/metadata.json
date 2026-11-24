@@ -1,38 +1,40 @@
 {
-  "name": "积木旷野",
-  "description": "《积木旷野》是一款冒险游戏，你驾驶小飞机掠过积木拼成的森林、河流与山丘。顺着风向前，把这片会生长的旷野慢慢看完。",
-  "instructions": "用 W、A、S、D 或方向键驾驶小飞机，也可以点屏幕上的方向按钮。鼠标拖动可以环视，滚轮可以缩放。空格暂停或继续飞行，H 隐藏或显示界面，M 开关音效。小地图可以放大查看周边，回到出生点会回到出发的位置。目标是自己飞过森林、河流和山丘，这段飞行没有终点。",
-  "gameplayType": "冒险",
+  "description": "BRICKLAND is an adventure game where you fly a little plane over brick-built forests, rivers, and hills. Follow the wind and take your time seeing this ever-growing wilderness.",
+  "descriptionSource": "llm",
+  "gameplayType": "Adventure",
+  "generatedAt": "2026-11-06T08:20:00.000Z",
+  "instructions": "Fly the little plane with W, A, S, D or the arrow keys, or tap the on-screen direction buttons. Drag the mouse to look around, scroll to zoom. Space pauses or resumes the flight, H hides or shows the interface, M toggles sound. The minimap can be enlarged to see the area around you, and returning to the starting point takes you back to where you began. The goal is simply to fly over forests, rivers, and hills — this flight has no finish line.",
+  "name": "BRICKLAND",
   "nameCandidates": [
     {
-      "name": "积木旷野",
-      "formula": "[地点]+[材质]",
-      "rationale": "点出积木拼成的旷野，也是画面里真正的地点。"
+      "formula": "[Place]+[Material]",
+      "name": "BRICKLAND",
+      "rationale": "Names the brick-built wilderness, which is also the real place in the picture."
     },
     {
-      "name": "砖野小机",
-      "formula": "[地点]+[载具]",
-      "rationale": "把砖块旷野和驾驶的小飞机放在一起。"
+      "formula": "[Place]+[Vehicle]",
+      "name": "Brickwild Flyer",
+      "rationale": "Puts the brick wilderness together with the little plane you fly."
     },
     {
-      "name": "云上砖野",
-      "formula": "[地点]+[传说]",
-      "rationale": "飞行从云层穿出，下面是砖块拼成的原野。"
+      "formula": "[Place]+[Legend]",
+      "name": "Brickwild Above the Clouds",
+      "rationale": "The flight breaks out of the clouds, with the brick-built wilds below."
     },
     {
-      "name": "森林航线",
-      "formula": "[地点]+[之旅]",
-      "rationale": "飞行路线穿过森林，航线是具体的路径。"
+      "formula": "[Place]+[Journey]",
+      "name": "Forest Flight Path",
+      "rationale": "The flight route crosses the forest; the path is a concrete route."
     },
     {
-      "name": "积木旅人",
-      "formula": "[角色]+[之旅]",
-      "rationale": "以旅人点出没有终点的探索。"
+      "formula": "[Character]+[Journey]",
+      "name": "Brick Traveler",
+      "rationale": "A traveler evokes the endless exploration."
     }
   ],
-  "tags": ["gameplay_casual"],
   "nameSource": "llm",
-  "descriptionSource": "llm",
-  "tagsSource": "llm",
-  "generatedAt": "2026-11-06T08:20:00.000Z"
+  "tags": [
+    "gameplay_casual"
+  ],
+  "tagsSource": "llm"
 }
