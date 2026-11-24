@@ -184,6 +184,21 @@ export const worldConfig = {
         additive: true,
         showAnchors: false,
       },
+      combat: {
+        enabled: true,
+        /** Shots per second while Space is held. */
+        fireRate: 3,
+        /** Bolt speed in world units per second (plus the plane's velocity). */
+        boltSpeed: 30,
+        /** Seconds before a bolt expires. */
+        boltLife: 2,
+        /** Bolt pool size; extra shots are dropped when the pool is full. */
+        boltCount: 64,
+        /** Bolt length in world units (a small glowing brick). */
+        boltSize: 0.35,
+        /** World units ahead of the plane center where bolts spawn. */
+        noseOffset: 1.2,
+      },
     },
   },
   water: {
