@@ -1,9 +1,9 @@
 import { defaultBuildStages, shaderStages } from 'three/webgpu'
 
-// Three r185 的 WebGPU RenderObject 会监听材质（material）的释放，但不会监听网格（mesh）的释放。
-// 因此，共享的源材质会保留每个对象的绑定（per-object bindings），而释放几何体（geometry）时，
-// 只会释放第一个对象的派生实例属性（derived instance attributes）。
-// 这里保留与私有 API 的兼容性实现，紧挨着渲染器所有者放置。
+// Three r185's WebGPU RenderObject listens for material disposal, but not for mesh disposal.
+// So a shared source material keeps each object's per-object bindings, while disposing a geometry
+// only releases the first object's derived instance attributes.
+// This keeps the compatibility implementation with the private API, placed right next to the renderer owner.
 export function installObjectResourceCleanup(renderer) {
   const objects = renderer._objects
   const attributes = renderer._attributes
