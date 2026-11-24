@@ -8,8 +8,8 @@ scene.background = new THREE.Color('#d9e7df')
 const patches = []
 const labels = document.querySelector('#labels')
 for (const [index, [biome, name]] of [
-  ['forest', '青翠森林'], ['autumnForest', '秋日林地'], ['desert', '金色沙漠'],
-  ['snowForest', '雪松之境'], ['wetland', '静谧湿地'], ['volcano', '火山荒原'],
+  ['forest', 'Verdant Forest'], ['autumnForest', 'Autumn Woodland'], ['desert', 'Golden Desert'],
+  ['snowForest', 'Cedar Realm'], ['wetland', 'Quiet Wetlands'], ['volcano', 'Volcanic Wastes'],
 ].entries()) {
   const config = structuredClone(worldConfig)
   config.biomes.previewBiome = biome
