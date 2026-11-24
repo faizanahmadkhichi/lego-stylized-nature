@@ -94,7 +94,7 @@ export default class Experience {
     const started = performance.now()
     this.renderer.attachPipeline(this.scene, this.worldCamera.instance)
     await this.renderer.init()
-    this.ui?.setStage('正在收集积木与树木…')
+    this.ui?.setStage('Gathering bricks and trees…')
     const rendererReady = performance.now()
     this.initTimings.rendererMs = rendererReady - started
     await this.resources.ready
@@ -109,7 +109,7 @@ export default class Experience {
     const environmentReady = performance.now()
     this.initTimings.environmentMs = environmentReady - resourcesReady
     this.world.build()
-    this.ui?.setStage('正在点亮这片旷野…')
+    this.ui?.setStage('Lighting up the wilds…')
     const worldReady = performance.now()
     this.initTimings.worldMs = worldReady - environmentReady
 
@@ -164,7 +164,7 @@ export default class Experience {
       player.input.dispose()
     }
 
-    this.ui.setStage('即将穿出云层…')
+    this.ui.setStage('About to break through the clouds…')
     await new Promise((resolve) => {
       const timer = setTimeout(() => {
         this._cancelPresent = null
