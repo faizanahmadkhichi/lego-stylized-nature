@@ -1,87 +1,87 @@
-# 程序化 Prefab Phase 0–1 实施计划
+# Procedural Prefab Phase 0–1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 搭建程序化 prefab 基础设施（LEGO 单位、零件、组装、registry 接入），并以 `landFlower` 为试点替换 `flower.glb`，优先保持外观一致，再减少面数（原 GLB 3452 面，参考预算 600 面，可按视觉需要调整）。
+**Goal:** Build the procedural prefab infrastructure (LEGO units, parts, assembly, registry integration), and pilot it by replacing `flower.glb` with `landFlower`, keeping the look consistent first, then reducing triangle count (original GLB: 3452 triangles; reference budget: 600, adjustable as the visuals require).
 
-**Architecture:** 三层：`legoUnits.js` / `legoColors.js` 定义尺寸与色板；`prefabParts.js` 提供低面零件与 `makePrefabScene`（按槽合并、对齐凸点原点、使用 `createLegoMaterial`）；`PrefabRegistry` 对 `builder` 变体调用构建函数并缓存、负责释放。下游 `PrefabPlacer` / `PrefabPipelineWarmup` 不改。
+**Architecture:** Three layers: `legoUnits.js` / `legoColors.js` define sizes and the color palette; `prefabParts.js` provides low-poly parts and `makePrefabScene` (merge per slot, align to the stud origin, use `createLegoMaterial`); `PrefabRegistry` calls the build function for `builder` variants, caches them, and owns disposal. Downstream `PrefabPlacer` / `PrefabPipelineWarmup` are unchanged.
 
-**Tech Stack:** three 0.185（`three/webgpu`、`three/addons/utils/BufferGeometryUtils.js`），Node 24 内置 test runner。
+**Tech Stack:** three 0.185( `three/webgpu`, `three/addons/utils/BufferGeometryUtils.js` ), Node 24 built-in test runner.
 
 **Spec:** `docs/procedural-prefab-plan.md`
 
-**验收调整（2026-10-10）：** 按用户要求放宽面数预算；分段数与小倒角由轮廓和高光需要决定。参考预算不作为测试硬上限，自动化仅要求模型非空且面数低于原 GLB，并保留 mesh、索引、尺寸、放置与释放等约束。当前花为 206 面，无需为了用满预算增加细节；后续细化先做视觉对比。具体规则以 Spec 第 3.4–3.5、5.2 节为准。
+**Acceptance adjustment (2026-10-10):** Per the user's request, the triangle budget is relaxed; segment counts and small chamfers are decided by silhouette and highlight needs. The reference budget is not a hard test cap — automation only requires the model to be non-empty with fewer triangles than the original GLB, while keeping the mesh, index, size, placement, and disposal constraints. The current flower is 206 triangles; no need to add detail just to use up the budget; refine later based on visual comparison. The exact rules are Spec §3.4–3.5 and §5.2.
 
-**实施状态（2026-10-10）：** Task 1–4 的代码和测试已落地；LEGO 零件、花 builder、registry 缓存/释放和 `landFlower` 切换完成，视觉检查后删除旧 GLB/source。花为 206 面，同视口同机位场景三角面降低 6.78%，drawCalls 保持 327。全量测试 276 项中 266 通过，10 项既有失败未变化；生产构建通过。渲染记录见 Spec 第 4 节。以下提交步骤未执行，改动保留在工作区供审阅。
+**Implementation status (2026-10-10):** The code and tests for Tasks 1–4 are in place; the LEGO parts, flower builder, registry caching/disposal, and the `landFlower` switch are done, and the old GLB/source were deleted after visual inspection. The flower is 206 triangles; in the same viewport and camera position, scene triangles dropped 6.78% and drawCalls stayed at 327. Full test suite: 266 of 276 passed, with the same 10 pre-existing failures; the production build passed. Render records are in Spec §4. The commit steps below were not executed; the changes remain in the working tree for review.
 
 ## Global Constraints
 
-- 构建函数返回与 `gltf.scene` 同结构的 `THREE.Group`；纯函数，不读随机数。
-- prefab 原点 `PREFAB_ORIGIN = [-0.05, 0, 0.05]`，整体 `min.y = 0`。
-- 实例色 mesh 名以 `_InstanceColor` 结尾；每变体 ≤ 2 个 mesh。
-- 材质基于 `createLegoMaterial()`（`src/materials/tsl/legoMaterial.js`），每个槽一个材质实例，归 `PrefabRegistry` 所有并由其释放。
-- 几何体不保留 `uv`，全部为索引几何。
-- `landFlower` 的 `instanceColors`、`placement`、`weight: 0.5` 保持不变。
-- 工作区已有与本计划无关的未提交改动（含 `src/world/world.js`）：提交时只 `git add` 本计划列出的文件；`world.js` 用 `git add -p` 只暂存 `dispose` 那一处。
-- 基线（2026-10-10）：`node --test` 共 252 项，242 通过、10 失败（`aircraftInput` 3、`environmentShadowFollow` 1、`prefabInstanceColorConfig` 2、`tiltShiftPostProcessing` 2、`worldCameraFollow` 2）。每个任务结束时失败项必须仍是这 10 项，不得新增。
+- Build functions return a `THREE.Group` with the same structure as `gltf.scene`; pure functions, no random reads.
+- Prefab origin `PREFAB_ORIGIN = [-0.05, 0, 0.05]`, overall `min.y = 0`.
+- Instance-color mesh names end with `_InstanceColor`; at most 2 meshes per variant.
+- Materials are based on `createLegoMaterial()` (`src/materials/tsl/legoMaterial.js`), one material instance per slot, owned and disposed by `PrefabRegistry`.
+- Geometries keep no `uv`; all are indexed geometry.
+- `landFlower`'s `instanceColors`, `placement`, and `weight: 0.5` stay unchanged.
+- The working tree already has unrelated uncommitted changes (including `src/world/world.js`): when committing, only `git add` the files listed in this plan; for `world.js`, use `git add -p` to stage only the `dispose` change.
+- Baseline (2026-10-10): `node --test` totals 252 tests, 242 passed, 10 failed (`aircraftInput` 3, `environmentShadowFollow` 1, `prefabInstanceColorConfig` 2, `tiltShiftPostProcessing` 2, `worldCameraFollow` 2). At the end of each task, the failures must still be exactly these 10 — no new ones.
 
-## 实测数据（Phase 0 已完成部分）
+## Measured Data (Phase 0, completed part)
 
-`public/model/terrain/legoBlock2x2.glb`（172 面）相对 prefab 原点（即 `(height + 1) * layerHeight`）：
+`public/model/terrain/legoBlock2x2.glb` (172 triangles) relative to the prefab origin (i.e. `(height + 1) * layerHeight`):
 
-- 砖可见顶面在原点上方约 0.006（含 0.005 倒角）。
-- 凸点半径 0.035，顶面在原点上方约 0.025，约 8 段。
-- 因此从 `y = 0` 起建的零件底部会埋入砖顶约 0.006，不可见；底座半径需 > 0.035 才能盖住凸点。
+- The brick's visible top face sits about 0.006 above the origin (including a 0.005 chamfer).
+- Stud radius 0.035; the stud top sits about 0.025 above the origin, about 8 segments.
+- So the bottom of parts built up from `y = 0` sinks about 0.006 into the brick top and is invisible; the base radius must be > 0.035 to cover the stud.
 
-`flower.glb`：`flower_root`（620 面，材质 `LegoGreen`，线性色 `(0.0529, 0.266, 0.0775)` = sRGB `#418d4f`）+ `flower_InstanceColor`（2832 面，无材质）。
+`flower.glb`: `flower_root` (620 triangles, `LegoGreen` material, linear color `(0.0529, 0.266, 0.0775)` = sRGB `#418d4f`) + `flower_InstanceColor` (2832 triangles, no material).
 
-## 文件结构
+## File Structure
 
-| 文件 | 职责 |
+| File | Responsibility |
 |---|---|
-| Create `src/world/prefabs/builders/legoUnits.js` | LEGO 尺寸常量（由地形网格推导 + 实测凸点） |
-| Create `src/world/prefabs/builders/legoColors.js` | builder 可用的命名色板 |
-| Create `src/world/prefabs/builders/prefabParts.js` | 低面零件 `cylinder` / `box` / `stud` / `flowerPlate` 与 `makePrefabScene` |
+| Create `src/world/prefabs/builders/legoUnits.js` | LEGO size constants (derived from the terrain grid + measured studs) |
+| Create `src/world/prefabs/builders/legoColors.js` | Named color palette for builders |
+| Create `src/world/prefabs/builders/prefabParts.js` | Low-poly parts `cylinder` / `box` / `stud` / `flowerPlate` and `makePrefabScene` |
 | Create `src/world/prefabs/builders/flower.js` | `buildFlower()` |
-| Create `src/world/prefabs/builders/index.js` | `prefabBuilders` 注册表 |
-| Modify `src/world/prefabs/PrefabRegistry.js` | builder 分支、缓存、`dispose()` |
-| Modify `src/world/world.js:345-347` | `dispose()` 中释放 registry |
-| Modify `src/assets/manifests/biomePrefabs.js:122-133` | `landFlower` 改为 builder 变体 |
-| Modify `src/assets/sources.js:31` | 删除 `landFlowerModel` |
+| Create `src/world/prefabs/builders/index.js` | `prefabBuilders` registry |
+| Modify `src/world/prefabs/PrefabRegistry.js` | Builder branch, caching, `dispose()` |
+| Modify `src/world/world.js:345-347` | Release the registry in `dispose()` |
+| Modify `src/assets/manifests/biomePrefabs.js:122-133` | Change `landFlower` to a builder variant |
+| Modify `src/assets/sources.js:31` | Delete `landFlowerModel` |
 | Delete `public/model/prefab/flower.glb` | |
-| Create `test/prefabParts.test.js`、`test/prefabBuilders.test.js`、`test/prefabRegistry.test.js` | |
-| Modify `test/experienceLifecycle.test.js:84-94` | 释放顺序包含 registry |
-| Modify `docs/procedural-prefab-plan.md` | 花的参考预算 600（可调整）、主色更正 |
+| Create `test/prefabParts.test.js`, `test/prefabBuilders.test.js`, `test/prefabRegistry.test.js` | |
+| Modify `test/experienceLifecycle.test.js:84-94` | Disposal order includes the registry |
+| Modify `docs/procedural-prefab-plan.md` | Flower reference budget 600 (adjustable), main color correction |
 
 ---
 
-### Task 0: 渲染基线（手动，无代码改动）
+### Task 0: Render Baseline (manual, no code changes)
 
-- [ ] **Step 1: 启动并固定机位**
+- [ ] **Step 1: Launch and fix the camera position**
 
-Run: `pnpm dev`，浏览器打开 `http://localhost:5173/#debug`。保持默认 seed（`20260608`），不移动飞机，等待地形加载完成。
+Run: `pnpm dev`, then open `http://localhost:5173/#debug` in the browser. Keep the default seed (`20260608`), do not move the plane, and wait for the terrain to finish loading.
 
-- [ ] **Step 2: 记录 forest 区域的三角面与 draw call**
+- [ ] **Step 2: Record triangles and draw calls in the forest area**
 
-在浏览器控制台执行：
+Run in the browser console:
 
 ```js
 const info = __experience.renderer.instance.info.render
 console.log({ triangles: info.triangles, drawCalls: info.drawCalls })
 ```
 
-把输出连同 Performance 面板显示的帧时间记到 `docs/procedural-prefab-plan.md` 第 4 节 Phase 0 下（新增一行「基线：triangles=…, drawCalls=…, frame=…ms」）。
+Record the output together with the frame time shown in the Performance panel under Phase 0 in §4 of `docs/procedural-prefab-plan.md` (add a line "Baseline: triangles=…, drawCalls=…, frame=…ms").
 
-- [ ] **Step 3: 提交**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add docs/procedural-prefab-plan.md
-git commit -m "docs: 记录程序化 prefab 渲染基线"
+git commit -m "docs: record procedural prefab render baseline"
 ```
 
 ---
 
-### Task 1: LEGO 单位、色板与零件库
+### Task 1: LEGO Units, Color Palette, and Part Library
 
 **Files:**
 - Create: `src/world/prefabs/builders/legoUnits.js`
@@ -91,16 +91,16 @@ git commit -m "docs: 记录程序化 prefab 渲染基线"
 
 **Interfaces:**
 - Produces:
-  - `legoUnits.js`: `STUD_PITCH: number`、`PLATE_HEIGHT: number`、`STUD_RADIUS: number`、`STUD_HEIGHT: number`、`PREFAB_ORIGIN: [number, number, number]`
+  - `legoUnits.js`: `STUD_PITCH: number`, `PLATE_HEIGHT: number`, `STUD_RADIUS: number`, `STUD_HEIGHT: number`, `PREFAB_ORIGIN: [number, number, number]`
   - `legoColors.js`: `LEGO_COLORS: { green: string, white: string }`
   - `prefabParts.js`:
-    - `cylinder({ radius, height, segments, top = true, bottom = false }) => BufferGeometry`（底面在 y=0，按需保留顶/底盖）
-    - `box({ width, height, depth, bottom = false }) => BufferGeometry`（底面在 y=0）
-    - `stud() => BufferGeometry`（6 段，无底面，18 面）
-    - `flowerPlate({ outerRadius, innerRadius, height, petals = 5 }) => BufferGeometry`（星形花板，无底面）
+    - `cylinder({ radius, height, segments, top = true, bottom = false }) => BufferGeometry`(bottom face at y=0, keep top/bottom caps as needed)
+    - `box({ width, height, depth, bottom = false }) => BufferGeometry`(bottom face at y=0)
+    - `stud() => BufferGeometry`(6 segments, no bottom face, 18 triangles)
+    - `flowerPlate({ outerRadius, innerRadius, height, petals = 5 }) => BufferGeometry`(star-shaped flower plate, no bottom face)
     - `makePrefabScene(slots: { name: string, color: string, parts: BufferGeometry[] }[]) => THREE.Group`
 
-- [ ] **Step 1: 写失败测试 `test/prefabParts.test.js`**
+- [ ] **Step 1: Write the failing test `test/prefabParts.test.js`**
 
 ```js
 import test from 'node:test'
@@ -196,12 +196,12 @@ test('makePrefabScene merges each slot into one LEGO-material mesh on the stud o
 })
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [ ] **Step 2: Run the test and confirm it fails**
 
 Run: `node --test test/prefabParts.test.js`
 Expected: FAIL，`Cannot find module '.../builders/legoUnits.js'`
 
-- [ ] **Step 3: 实现 `legoUnits.js`**
+- [ ] **Step 3: Implement `legoUnits.js`**
 
 ```js
 import { worldConfig } from '../../WorldConfig.js'
@@ -220,7 +220,7 @@ export const STUD_HEIGHT = 0.019
 export const PREFAB_ORIGIN = [-STUD_PITCH / 2, 0, STUD_PITCH / 2]
 ```
 
-- [ ] **Step 4: 实现 `legoColors.js`**
+- [ ] **Step 4: Implement `legoColors.js`**
 
 ```js
 export const LEGO_COLORS = {
@@ -229,7 +229,7 @@ export const LEGO_COLORS = {
 }
 ```
 
-- [ ] **Step 5: 实现 `prefabParts.js`**
+- [ ] **Step 5: Implement `prefabParts.js`**
 
 ```js
 import * as THREE from 'three/webgpu'
@@ -321,42 +321,42 @@ function toMergeable(geometry) {
 }
 ```
 
-- [ ] **Step 6: 运行测试确认通过**
+- [ ] **Step 6: Run the test and confirm it passes**
 
 Run: `node --test test/prefabParts.test.js`
-Expected: 6 项全部 PASS
+Expected: all 6 PASS
 
-- [ ] **Step 7: 全量测试无新增失败**
+- [ ] **Step 7: Full test suite with no new failures**
 
 Run: `node --test --test-reporter=tap 2>&1 | Select-String -Pattern "^# (tests|pass|fail)|^not ok"`
-Expected: `# fail 10`，失败项与 Global Constraints 中的基线一致。
+Expected: `# fail 10`, with the same failures as the baseline in Global Constraints.
 
-- [ ] **Step 8: 提交**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/world/prefabs/builders/legoUnits.js src/world/prefabs/builders/legoColors.js src/world/prefabs/builders/prefabParts.js test/prefabParts.test.js
-git commit -m "feat: 新增 程序化 prefab 的 LEGO 单位与零件库"
+git commit -m "feat: add LEGO units and part library for procedural prefabs"
 ```
 
 ---
 
-### Task 2: 花的构建函数与 builder 注册表
+### Task 2: Flower Build Function and Builder Registry
 
 **Files:**
 - Create: `src/world/prefabs/builders/flower.js`
 - Create: `src/world/prefabs/builders/index.js`
 - Test: `test/prefabBuilders.test.js`
-- Modify: `docs/procedural-prefab-plan.md`（3.5 节花的预算、2.2 节主色）
+- Modify: `docs/procedural-prefab-plan.md` (§3.5 flower budget, §2.2 main color)
 
 **Interfaces:**
-- Consumes: Task 1 的 `cylinder`、`box`、`stud`、`flowerPlate`、`makePrefabScene`、`PLATE_HEIGHT`、`LEGO_COLORS`
+- Consumes: Task 1's `cylinder`, `box`, `stud`, `flowerPlate`, `makePrefabScene`, `PLATE_HEIGHT`, `LEGO_COLORS`
 - Produces:
-  - `buildFlower() => THREE.Group`，子 mesh 依次为 `flower_root`、`flower_InstanceColor`
-  - `prefabBuilders: Record<string, (params?: object) => THREE.Group>`，当前为 `{ flower: buildFlower }`
+  - `buildFlower() => THREE.Group`, whose child meshes are, in order, `flower_root`, `flower_InstanceColor`
+  - `prefabBuilders: Record<string, (params?: object) => THREE.Group>`, currently `{ flower: buildFlower }`
 
-面数构成：底座 6 段圆板 18 + 3 根 4 段茎 24 + 2 片叶 20 = `flower_root` 62；3 个星形花板 (30 + 凸点 18) = `flower_InstanceColor` 144；合计 206。
+Triangle breakdown: base 6-segment round plate 18 + 3 four-segment stems 24 + 2 leaves 20 = `flower_root` 62; 3 star-shaped flower plates (30 + stud 18) = `flower_InstanceColor` 144; total 206.
 
-- [ ] **Step 1: 写失败测试 `test/prefabBuilders.test.js`**
+- [ ] **Step 1: Write the failing test `test/prefabBuilders.test.js`**
 
 ```js
 import test from 'node:test'
@@ -428,12 +428,12 @@ test('tint and instance color resolution clone builder materials without mutatin
 })
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [ ] **Step 2: Run the test and confirm it fails**
 
 Run: `node --test test/prefabBuilders.test.js`
 Expected: FAIL，`Cannot find module '.../builders/index.js'`
 
-- [ ] **Step 3: 实现 `flower.js`**
+- [ ] **Step 3: Implement `flower.js`**
 
 ```js
 import { LEGO_COLORS } from './legoColors.js'
@@ -481,7 +481,7 @@ export function buildFlower() {
 }
 ```
 
-- [ ] **Step 4: 实现 `index.js`**
+- [ ] **Step 4: Implement `index.js`**
 
 ```js
 import { buildFlower } from './flower.js'
@@ -491,47 +491,47 @@ export const prefabBuilders = {
 }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [ ] **Step 5: Run the test and confirm it passes**
 
 Run: `node --test test/prefabBuilders.test.js`
-Expected: 5 项全部 PASS。若尺寸断言失败，只调整 `STEMS` 的 `tilt` / `length`，不放宽容差。
+Expected: all 5 PASS. If a size assertion fails, only adjust `STEMS`' `tilt` / `length`; do not loosen the tolerances.
 
-- [ ] **Step 6: 更新计划书**
+- [ ] **Step 6: Update the plan doc**
 
-`docs/procedural-prefab-plan.md` 中：
-- 3.5 节 `landFlower` 行：采用可调整的参考预算 `600`，保留三朵花、叶片与凸点，按视觉需要补圆润花瓣、茎和边缘；当前实际 206 面。
-- 2.2 节 `flower.glb` 主色 `LegoGreen #0d4414` 改为 `LegoGreen #418d4f（sRGB）`。
+In `docs/procedural-prefab-plan.md`:
+- §3.5 `landFlower` row: use an adjustable reference budget of `600`, keeping the three flowers, leaves, and studs, and add rounder petals, stems, and edges as the visuals require; the current actual count is 206 triangles.
+- §2.2 `flower.glb` main color: change `LegoGreen #0d4414` to `LegoGreen #418d4f (sRGB)`.
 
-- [ ] **Step 7: 全量测试无新增失败**
+- [ ] **Step 7: Full test suite with no new failures**
 
 Run: `node --test --test-reporter=tap 2>&1 | Select-String -Pattern "^# (tests|pass|fail)|^not ok"`
-Expected: `# fail 10`，失败项与基线一致。
+Expected: `# fail 10`, with the same failures as the baseline.
 
-- [ ] **Step 8: 提交**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/world/prefabs/builders/flower.js src/world/prefabs/builders/index.js test/prefabBuilders.test.js docs/procedural-prefab-plan.md
-git commit -m "feat: 新增 程序化花 prefab 构建函数"
+git commit -m "feat: add procedural flower prefab build function"
 ```
 
 ---
 
-### Task 3: `PrefabRegistry` 支持 builder 变体与释放
+### Task 3: `PrefabRegistry` Support for Builder Variants and Disposal
 
 **Files:**
-- Modify: `src/world/prefabs/PrefabRegistry.js`（整文件）
+- Modify: `src/world/prefabs/PrefabRegistry.js` (whole file)
 - Modify: `src/world/world.js:345-347`
-- Test: `test/prefabRegistry.test.js`（新建）
+- Test: `test/prefabRegistry.test.js` (new)
 - Modify: `test/experienceLifecycle.test.js:84-94`
 
 **Interfaces:**
-- Consumes: Task 2 的 `prefabBuilders`
+- Consumes: Task 2's `prefabBuilders`
 - Produces:
   - `new PrefabRegistry(resources, manifest = biomePrefabs, builders = prefabBuilders)`
-  - `getVariantAsset(prefabId, variantIndex) => { scene: THREE.Group } | null`：`builder` 变体按 `prefabId:variantIndex` 缓存；未知 builder 返回 `null`
-  - `dispose() => void`：释放所有构建出的 geometry 与 material，可重复调用
+  - `getVariantAsset(prefabId, variantIndex) => { scene: THREE.Group } | null`: `builder` variants are cached by `prefabId:variantIndex`; an unknown builder returns `null`
+  - `dispose() => void`: releases all built geometry and materials; safe to call repeatedly
 
-- [ ] **Step 1: 写失败测试 `test/prefabRegistry.test.js`**
+- [ ] **Step 1: Write the failing test `test/prefabRegistry.test.js`**
 
 ```js
 import test from 'node:test'
@@ -586,12 +586,12 @@ test('dispose releases built geometry and materials exactly once', () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [ ] **Step 2: Run the test and confirm it fails**
 
 Run: `node --test test/prefabRegistry.test.js`
-Expected: FAIL，builder 用例中 `first` 为 `undefined`（`Cannot read properties of undefined (reading 'scene')`），`dispose` 用例报 `registry.dispose is not a function`
+Expected: FAIL — in the builder case `first` is `undefined` (`Cannot read properties of undefined (reading 'scene')`), and the `dispose` case reports `registry.dispose is not a function`
 
-- [ ] **Step 3: 实现 `PrefabRegistry.js`**
+- [ ] **Step 3: Implement `PrefabRegistry.js`**
 
 ```js
 import { biomePrefabs } from '../../assets/manifests/biomePrefabs.js'
@@ -647,12 +647,12 @@ export default class PrefabRegistry {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [ ] **Step 4: Run the test and confirm it passes**
 
 Run: `node --test test/prefabRegistry.test.js`
-Expected: 3 项全部 PASS
+Expected: all 3 PASS
 
-- [ ] **Step 5: 修改 `test/experienceLifecycle.test.js` 的释放顺序用例（第 84–94 行）**
+- [ ] **Step 5: Update the disposal-order test case in `test/experienceLifecycle.test.js` (lines 84–94)**
 
 ```js
 test('World releases borrowers before shared materials and cloned geometry exactly once', () => {
@@ -669,14 +669,14 @@ test('World releases borrowers before shared materials and cloned geometry exact
 })
 ```
 
-- [ ] **Step 6: 运行确认失败**
+- [ ] **Step 6: Run and confirm it fails**
 
 Run: `node --test test/experienceLifecycle.test.js`
-Expected: FAIL，实际顺序缺少 `'registry'`
+Expected: FAIL, the actual order is missing `'registry'`
 
-- [ ] **Step 7: 修改 `src/world/world.js` 的 `dispose()`**
+- [ ] **Step 7: Modify `dispose()` in `src/world/world.js`**
 
-在 `this.terrainChunkManager = null` 与 `this.materials?.dispose()` 之间插入一行（可选调用，因为 `experienceLifecycle.test.js` 的 warmup 用例使用了没有 `dispose` 的 registry mock）：
+Insert a line between `this.terrainChunkManager = null` and `this.materials?.dispose()` (optional call, because the warmup test in `experienceLifecycle.test.js` uses a registry mock without `dispose`):
 
 ```js
         this.terrainChunkManager?.dispose()
@@ -685,40 +685,40 @@ Expected: FAIL，实际顺序缺少 `'registry'`
         this.materials?.dispose()
 ```
 
-- [ ] **Step 8: 运行确认通过**
+- [ ] **Step 8: Run and confirm it passes**
 
 Run: `node --test test/experienceLifecycle.test.js test/prefabRegistry.test.js`
-Expected: 全部 PASS
+Expected: all PASS
 
-- [ ] **Step 9: 全量测试无新增失败**
+- [ ] **Step 9: Full test suite with no new failures**
 
 Run: `node --test --test-reporter=tap 2>&1 | Select-String -Pattern "^# (tests|pass|fail)|^not ok"`
-Expected: `# fail 10`，失败项与基线一致。
+Expected: `# fail 10`, with the same failures as the baseline.
 
-- [ ] **Step 10: 提交（`world.js` 只暂存本处改动）**
+- [ ] **Step 10: Commit (`world.js`: stage only this change)**
 
 ```bash
 git add src/world/prefabs/PrefabRegistry.js test/prefabRegistry.test.js test/experienceLifecycle.test.js
 git add -p src/world/world.js
-git commit -m "feat: 新增 PrefabRegistry 支持程序化 builder 变体"
+git commit -m "feat: add procedural builder variant support to PrefabRegistry"
 ```
 
 ---
 
-### Task 4: `landFlower` 切换到 builder，视觉验收后删除 GLB
+### Task 4: Switch `landFlower` to the Builder, Delete the GLB After Visual Acceptance
 
 **Files:**
 - Modify: `src/assets/manifests/biomePrefabs.js:122-133`
 - Modify: `src/assets/sources.js:31`
 - Delete: `public/model/prefab/flower.glb`
-- Modify: `test/prefabBuilders.test.js`（追加 manifest 用例）
+- Modify: `test/prefabBuilders.test.js` (append manifest test cases)
 
 **Interfaces:**
-- Consumes: Task 2 的 `prefabBuilders.flower`、Task 3 的 builder 分支
+- Consumes: Task 2's `prefabBuilders.flower` and Task 3's builder branch
 
-- [ ] **Step 1: 在 `test/prefabBuilders.test.js` 追加 manifest 用例**
+- [ ] **Step 1: Append manifest test cases to `test/prefabBuilders.test.js`**
 
-文件顶部追加 import：
+Add imports at the top of the file:
 
 ```js
 import { biomePrefabs } from '../src/assets/manifests/biomePrefabs.js'
@@ -726,7 +726,7 @@ import sources from '../src/assets/sources.js'
 import { matchesInstanceColorMesh } from '../src/world/prefabs/prefabInstanceColor.js'
 ```
 
-文件末尾追加：
+Append at the end of the file:
 
 ```js
 test('every manifest variant resolves to a loaded source or a registered builder', () => {
@@ -761,12 +761,12 @@ test('landFlower is built procedurally', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [ ] **Step 2: Run and confirm it fails**
 
 Run: `node --test test/prefabBuilders.test.js`
-Expected: `landFlower is built procedurally` FAIL（当前为 `source: 'landFlowerModel'`），其余 PASS
+Expected: `landFlower is built procedurally` FAILS (currently `source: 'landFlowerModel'`), the rest PASS
 
-- [ ] **Step 3: 修改 manifest 的 `landFlower.variants`**
+- [ ] **Step 3: Modify the manifest's `landFlower.variants`**
 
 ```js
   landFlower: {
@@ -783,47 +783,47 @@ Expected: `landFlower is built procedurally` FAIL（当前为 `source: 'landFlow
   }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [ ] **Step 4: Run and confirm it passes**
 
 Run: `node --test test/prefabBuilders.test.js`
-Expected: 全部 PASS
+Expected: all PASS
 
-- [ ] **Step 5: 视觉与性能验收（手动）**
+- [ ] **Step 5: Visual and Performance Acceptance (manual)**
 
-Run: `pnpm dev`，打开 `http://localhost:5173/#debug`，与 Task 0 同样不移动飞机。检查：
+Run: `pnpm dev`, open `http://localhost:5173/#debug`, and do not move the plane, same as Task 0. Check:
 
-1. 控制台无 `has no mesh matching instance color suffix` 与新增的 `exceeded capacity` 警告。
-2. 花底座落在凸点上、不浮空、不明显陷入；拉近看 90° 旋转的几株仍对齐凸点。
-3. 花头颜色来自调色板（红 / 黄 / 白），茎叶为绿色，光泽与地形砖一致。
-4. 阴影正常。
-5. 控制台执行 Task 0 的命令，`triangles` 明显低于基线，`drawCalls` 不高于基线；帧时间不劣于基线。
+1. No `has no mesh matching instance color suffix` or new `exceeded capacity` warnings in the console.
+2. Flower bases sit on the studs — not floating, not visibly sunk; zooming in, the plants rotated 90° still align with the studs.
+3. Flower head colors come from the palette (red / yellow / white), stems and leaves are green, and the gloss matches the terrain bricks.
+4. Shadows look correct.
+5. Run the Task 0 command in the console: `triangles` clearly below the baseline, `drawCalls` no higher than the baseline, and frame time no worse than the baseline.
 
-不满意时只调整 `flower.js` 的常量，并重跑 `node --test test/prefabBuilders.test.js`。
+If not satisfied, only adjust the constants in `flower.js`, then re-run `node --test test/prefabBuilders.test.js`.
 
-- [ ] **Step 6: 删除 GLB 与 source**
+- [ ] **Step 6: Delete the GLB and the source**
 
-删除 `src/assets/sources.js` 第 31 行：
+Delete line 31 of `src/assets/sources.js`:
 
 ```js
   { name: 'landFlowerModel', type: 'gltfModel', path: 'model/prefab/flower.glb' }
 ```
 
-然后删除文件：
+Then delete the file:
 
 ```powershell
 git rm public/model/prefab/flower.glb
 ```
 
-- [ ] **Step 7: 全量测试无新增失败**
+- [ ] **Step 7: Full test suite with no new failures**
 
 Run: `node --test --test-reporter=tap 2>&1 | Select-String -Pattern "^# (tests|pass|fail)|^not ok"`
-Expected: `# fail 10`，失败项与基线一致。
+Expected: `# fail 10`, with the same failures as the baseline.
 
-- [ ] **Step 8: 记录结果并提交**
+- [ ] **Step 8: Record the results and commit**
 
-在 `docs/procedural-prefab-plan.md` 第 4 节 Phase 1 下追加一行「结果：triangles=…, drawCalls=…, frame=…ms」。
+Under Phase 1 in §4 of `docs/procedural-prefab-plan.md`, append a line "Result: triangles=…, drawCalls=…, frame=…ms".
 
 ```bash
 git add src/assets/manifests/biomePrefabs.js src/assets/sources.js test/prefabBuilders.test.js docs/procedural-prefab-plan.md
-git commit -m "feat: 新增 花 prefab 改为程序化生成并移除 flower.glb"
+git commit -m "feat: switch flower prefab to procedural generation and remove flower.glb"
 ```
