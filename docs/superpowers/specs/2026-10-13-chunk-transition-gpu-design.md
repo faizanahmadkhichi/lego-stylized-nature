@@ -1,16 +1,16 @@
-# Chunk 列过渡动效迁移到 GPU（不改 instanceMatrix）
+# Migrating Chunk Column Transition Animation to GPU (without changing instanceMatrix)
 
-状态：待实施（方案草稿，2026-10-13）
+Status: not yet implemented (draft design, 2026-10-13)
 
-## 目标
+## Goal
 
-把 [`ChunkColumnTransition`](../../../src/world/chunks/ChunkColumnTransition.js) 的列升起动画从"CPU 每帧重写 `instanceMatrix` 并上传"改成"材质 `positionNode` 在顶点着色器里计算位移"。过渡期间 `instanceMatrix` 不再被修改，CPU 每帧只为每个 chunk 写一个 `elapsed`。
+Move [`ChunkColumnTransition`](../../../src/world/chunks/ChunkColumnTransition.js)'s column-rise animation from "the CPU rewrites `instanceMatrix` every frame and uploads it" to "the material's `positionNode` computes the displacement in the vertex shader". During the transition, `instanceMatrix` is no longer modified; the CPU only writes one `elapsed` per chunk per frame.
 
-## 现状
+## Current State
 
-- `update()` 每帧遍历所有格子更新 `progress`，`applyMesh()` 再遍历 chunk 内所有实例重写 16 个 float，并对整段 `instanceMatrix` 提交上传。开销与实例数成正比。
-- 实际只会走 0 到 1 的加载显示路径：`ChunkRenderSlot.populate()` 先调 `resetTransition()`，随后 `startLoading()` 新建 `initiallyVisible=false` 的过渡。因此按格子记录的 `startProgress`、中途反向等逻辑在 GPU 版本中可以删除。
-- 进度只取决于时间和格子：
+- `update()` iterates over all cells every frame to update `progress`, then `applyMesh()` iterates over all instances in the chunk to rewrite 16 floats each, and submits an upload of the whole `instanceMatrix` segment. The cost scales with instance count.
+- In practice only the 0-to-1 loading reveal path is used: `ChunkRenderSlot.populate()` calls `resetTransition()` first, then `startLoading()` creates a transition with `initiallyVisible=false`. So per-cell `startProgress`, mid-transition reversal, and similar logic can be deleted in the GPU version.
+- Progress depends only on time and the cell:
 
 ```text
 order    = (reverse ? span - c : c) / span      // c = alongX ? cellX : cellZ, span = chunkSize - 1
@@ -21,11 +21,11 @@ x/z      = anchor + (base - anchor) * footprint
 y        = base.y * progress - riseDistance * (1 - progress)
 ```
 
-每个 chunk 只需要 4 个数：`elapsed`、`alongX`、`reverse`、`active`。
+Each chunk needs only 4 numbers: `elapsed`, `alongX`, `reverse`, `active`.
 
-与 [2026-10-11-prefab-radial-reveal-design.md](2026-10-11-prefab-radial-reveal-design.md) 的关系：那份文档删除的是 prefab 按距离缩放的径向动画。本方案是 chunk 加载的列过渡，会重新给材质加一个 reveal 用的 `positionNode`，但不引入距离驱动的缩放或淡入。
+Relation to [2026-10-11-prefab-radial-reveal-design.md](2026-10-11-prefab-radial-reveal-design.md): that document removes the prefab radial animation that scales by distance. This design is the chunk-loading column transition; it adds a reveal `positionNode` to the material again, but without introducing distance-driven scaling or fading.
 
-## 方案
+## Design
 
 ```mermaid
 flowchart LR
@@ -35,42 +35,42 @@ flowchart LR
   Mesh -->|"onObjectUpdate"| RevealUniform[revealState uniform]
   RevealUniform --> PositionNode["material.positionNode"]
   SharedUniforms[chunkRevealUniforms] --> PositionNode
-  PositionNode --> MainPass[主 pass]
-  PositionNode --> ShadowPass[阴影 pass]
+  PositionNode --> MainPass[Main pass]
+  PositionNode --> ShadowPass[Shadow pass]
 ```
 
-### 1. 位移放在 `positionNode`
+### 1. Put the displacement in `positionNode`
 
-`NodeMaterial.setupPosition()` 先执行 `instancedMesh(object)`，再执行 `positionNode`（`node_modules/three/src/materials/nodes/NodeMaterial.js` 约 796-806 行），所以此时 `positionLocal` 已经是 chunk 局部坐标，正好对应现在在矩阵上做的运算。
+`NodeMaterial.setupPosition()` runs `instancedMesh(object)` first, then `positionNode` (`node_modules/three/src/materials/nodes/NodeMaterial.js` lines ~796-806), so by then `positionLocal` is already in chunk-local coordinates — exactly matching the computation currently done on the matrix.
 
-阴影 pass 在没有 `castShadowPositionNode` 时会复用 `material.positionNode`（`node_modules/three/src/renderers/common/Renderer.js` 约 3413-3419 行），影子自动跟着升起。
+The shadow pass reuses `material.positionNode` when there is no `castShadowPositionNode` (`node_modules/three/src/renderers/common/Renderer.js` lines ~3413-3419), so shadows rise along automatically.
 
-### 2. 共享材质下的每 chunk 状态
+### 2. Per-chunk state under shared materials
 
-材质由 `WorldMaterials` 统一持有，所有 slot 共用。用 `uniform().onObjectUpdate()` 按 render object 读取 `object.userData.chunkReveal.state`。uniform 默认属于 `objectGroup`，每个 render object 一份；回调签名为 `callback(frame, self)`（`node_modules/three/src/nodes/core/UniformNode.js` 约 126-140 行）。
+Materials are held centrally by `WorldMaterials` and shared by all slots. Use `uniform().onObjectUpdate()` to read `object.userData.chunkReveal.state` per render object. By default a uniform belongs to `objectGroup`, one per render object; the callback signature is `callback(frame, self)` (`node_modules/three/src/nodes/core/UniformNode.js` lines ~126-140).
 
-`columnDuration`、`waveDuration`、`riseDistance`、`cellSize`、`chunkSize` 作为全局共享 uniform。
+`columnDuration`, `waveDuration`, `riseDistance`, `cellSize`, and `chunkSize` are global shared uniforms.
 
-取舍：调试面板修改过渡参数会立刻影响正在播放的 chunk，而不是像现在在 `start()` 时各自快照。
+Trade-off: changing transition parameters in the debug panel immediately affects chunks currently playing, instead of each taking its own snapshot in `start()` as now.
 
-### 3. 每个实例的锚点
+### 3. Anchor point per instance
 
-- terrain、water、lava：实例矩阵是纯平移（[`TerrainBrickRenderer`](../../../src/world/bricks/TerrainBrickRenderer.js) 用 `setPosition`，[`WaterBrickRenderer`](../../../src/world/bricks/WaterBrickRenderer.js) 用 `makeTranslation`，[`LavaBrickRenderer`](../../../src/world/bricks/LavaBrickRenderer.js) 用 `setPosition`），锚点为 `positionLocal.xz - positionGeometry.xz`，不需要额外数据。
-- prefab：实例矩阵是 `T * R * child.matrixWorld`，平移分量不等于放置锚点。给每个 bucket mesh 一个包装几何体：共享源几何体的 `index`、attributes、`groups`，额外加 `InstancedBufferAttribute('chunkAnchor', 2)`，写入现在的 `userData.chunkColumnPositions` 数据。
+- terrain, water, lava: instance matrices are pure translations ([`TerrainBrickRenderer`](../../../src/world/bricks/TerrainBrickRenderer.js) uses `setPosition`, [`WaterBrickRenderer`](../../../src/world/bricks/WaterBrickRenderer.js) uses `makeTranslation`, [`LavaBrickRenderer`](../../../src/world/bricks/LavaBrickRenderer.js) uses `setPosition`), so the anchor is `positionLocal.xz - positionGeometry.xz` and no extra data is needed.
+- prefab: instance matrices are `T * R * child.matrixWorld`, so the translation component is not the placement anchor. Give each bucket mesh a wrapper geometry: share the source geometry's `index`, attributes, and `groups`, and add an extra `InstancedBufferAttribute('chunkAnchor', 2)` holding the current `userData.chunkColumnPositions` data.
 
-### 4. 包围盒
+### 4. Bounding box
 
-过渡开始时扩展一次、结束时还原一次，与现在相同。隐藏端的锚点范围直接用整个 chunk 占地（`[0, chunkSize * cellSize]`，y 为 `-riseDistance`），不再逐实例遍历。
+Expand once when the transition starts and restore once when it ends, same as now. The anchor range on the hidden end uses the whole chunk footprint directly (`[0, chunkSize * cellSize]`, y of `-riseDistance`) instead of iterating per instance.
 
-### 不采用的方案
+### Rejected approaches
 
-- 计算着色器写 `instanceMatrix`：本质仍是改矩阵，且已明确排除。
-- 每个 slot 克隆一套材质：材质数量和预热成本变成 9 倍。
-- storage buffer 或纹理存每格进度：进度可以解析计算，没必要多存一份，还要处理按对象切换绑定。
+- Compute shader writing `instanceMatrix`: still fundamentally modifying the matrix, and already explicitly excluded.
+- Cloning a material set per slot: material count and warmup cost become 9x.
+- Storage buffer or texture storing per-cell progress: progress can be computed analytically, so there is no need to store an extra copy, and per-object binding switches would need handling too.
 
-## TSL 节点示意
+## TSL Node Sketch
 
-新文件 `src/world/chunks/chunkRevealNode.js`：
+New file `src/world/chunks/chunkRevealNode.js`:
 
 ```js
 import * as THREE from 'three/webgpu'
@@ -109,47 +109,47 @@ export function chunkRevealPosition({ anchorFromAttribute = false } = {}) {
 }
 ```
 
-进度为 1 时输出等于原位置，过渡结束后无需任何恢复。
+When progress is 1, the output equals the original position, so no restore is needed after the transition ends.
 
-## 实施步骤
+## Implementation Steps
 
-1. 新增 `src/world/chunks/chunkRevealNode.js`（上面的节点）。
-2. [`src/world/WorldMaterials.js`](../../../src/world/WorldMaterials.js)：给 `legoMaterial`、`waterMaterial`、`lavaMaterial` 设置 `positionNode = chunkRevealPosition()`；`previewMaterial` 可选。不要放进 `createLegoMaterial()`，因为 prefab builder 也调用它，而 prefab 需要 attribute 版本。
-3. prefab 材质统一用 `chunkRevealPosition({ anchorFromAttribute: true })`：
-   - [`src/world/prefabs/treeMaterial.js`](../../../src/world/prefabs/treeMaterial.js)：`MeshPhysicalMaterial` 换成 `MeshPhysicalNodeMaterial`。
-   - [`src/world/prefabs/PrefabRegistry.js`](../../../src/world/prefabs/PrefabRegistry.js)：在 `getVariantAsset()` 返回前，对每个 asset 只处理一次（GLTF 资源和 builder 产物都走这里）。普通 `Mesh*Material` 按 `NodeLibrary.fromMaterial()` 的做法转换（按 type 找到对应 NodeMaterial 类，`for (key in material)` 复制属性），然后设置 `positionNode`；builder 产物已是 NodeMaterial，直接覆盖 `positionNode`。
-   - tint 和 instanceColor 材质由 `sourceMaterial.clone()` 生成，`NodeMaterial.copy` 会复制 `positionNode`，无需改动。
-4. [`src/world/prefabs/PrefabPlacer.js`](../../../src/world/prefabs/PrefabPlacer.js)：
-   - `getOrCreateMeshBucket`：创建包装几何体（共享 `index`、attributes、`groups`、包围体，追加 `chunkAnchor`，长度 `capacity * 2`）。
-   - `populateInstancedMesh`：锚点写入 `geometry.attributes.chunkAnchor`，设置 `needsUpdate = true`，删除 `userData.chunkColumnPositions`。
-5. [`src/world/prefabs/PrefabPipelineWarmup.js`](../../../src/world/prefabs/PrefabPipelineWarmup.js)：`addWarmupMesh` 使用同样的包装几何体，保证顶点布局与运行时一致。
-6. [`src/world/chunks/ChunkColumnTransition.js`](../../../src/world/chunks/ChunkColumnTransition.js)：删除 `progress`、`startProgress`、`delays`、`baseMatrices`、`applyMesh`、矩阵还原。保留：
-   - `start(direction, settings)`：计算 `alongX`、`reverse`（沿用现有逻辑），`state.set(0, alongX, reverse, 1)`，写入共享 uniform，`duration = waveDuration + columnDuration`。
-   - `capture(group)`：对每个 InstancedMesh 设置 `mesh.userData.chunkReveal = this`，扩展一次包围盒。
-   - `update(dt)`：`state.x = elapsed += dt`；`elapsed >= duration` 时还原包围盒、删除 `userData.chunkReveal`，返回 true。
-   - `reset()` 和 `discard()`：还原包围盒并删除 `userData.chunkReveal`。
-7. [`src/world/chunks/ChunkManager.js`](../../../src/world/chunks/ChunkManager.js)：构造函数里设置一次 `chunkRevealUniforms.cellSize` 和 `chunkSize`。[`ChunkRenderSlot`](../../../src/world/chunks/ChunkRenderSlot.js) 的调用方式（`startLoading`、`updateTransition`、`ensurePrefabsBuilt` 里的补充 capture）基本不变；prefab 晚几帧建好时读的是同一个 `state`，会自动接上当前进度。
+1. Add `src/world/chunks/chunkRevealNode.js` (the node above).
+2. [`src/world/WorldMaterials.js`](../../../src/world/WorldMaterials.js): set `positionNode = chunkRevealPosition()` on `legoMaterial`, `waterMaterial`, and `lavaMaterial`; `previewMaterial` is optional. Don't put it in `createLegoMaterial()`, because the prefab builder also calls that, and prefabs need the attribute version.
+3. Prefab materials all use `chunkRevealPosition({ anchorFromAttribute: true })`:
+   - [`src/world/prefabs/treeMaterial.js`](../../../src/world/prefabs/treeMaterial.js): swap `MeshPhysicalMaterial` for `MeshPhysicalNodeMaterial`.
+   - [`src/world/prefabs/PrefabRegistry.js`](../../../src/world/prefabs/PrefabRegistry.js): before `getVariantAsset()` returns, process each asset only once (both GLTF resources and builder output go through here). Convert plain `Mesh*Material` following `NodeLibrary.fromMaterial()` (find the matching NodeMaterial class by type, copy properties with `for (key in material)`), then set `positionNode`; builder output is already a NodeMaterial, so just overwrite `positionNode`.
+   - tint and instanceColor materials are generated by `sourceMaterial.clone()`; `NodeMaterial.copy` copies `positionNode`, so no change is needed.
+4. [`src/world/prefabs/PrefabPlacer.js`](../../../src/world/prefabs/PrefabPlacer.js):
+   - `getOrCreateMeshBucket`: create the wrapper geometry (share `index`, attributes, `groups`, and bounding volumes; append `chunkAnchor` with length `capacity * 2`).
+   - `populateInstancedMesh`: write anchors into `geometry.attributes.chunkAnchor`, set `needsUpdate = true`, and delete `userData.chunkColumnPositions`.
+5. [`src/world/prefabs/PrefabPipelineWarmup.js`](../../../src/world/prefabs/PrefabPipelineWarmup.js): `addWarmupMesh` uses the same wrapper geometry so the vertex layout matches runtime.
+6. [`src/world/chunks/ChunkColumnTransition.js`](../../../src/world/chunks/ChunkColumnTransition.js): delete `progress`, `startProgress`, `delays`, `baseMatrices`, `applyMesh`, and the matrix restore. Keep:
+   - `start(direction, settings)`: compute `alongX` and `reverse` (keeping the existing logic), `state.set(0, alongX, reverse, 1)`, write to the shared uniform, `duration = waveDuration + columnDuration`.
+   - `capture(group)`: for each InstancedMesh, set `mesh.userData.chunkReveal = this` and expand the bounding box once.
+   - `update(dt)`: `state.x = elapsed += dt`; when `elapsed >= duration`, restore the bounding box, delete `userData.chunkReveal`, and return true.
+   - `reset()` and `discard()`: restore the bounding box and delete `userData.chunkReveal`.
+7. [`src/world/chunks/ChunkManager.js`](../../../src/world/chunks/ChunkManager.js): set `chunkRevealUniforms.cellSize` and `chunkSize` once in the constructor. [`ChunkRenderSlot`](../../../src/world/chunks/ChunkRenderSlot.js)'s calling pattern (`startLoading`, `updateTransition`, and the supplementary capture in `ensurePrefabsBuilt`) stays mostly unchanged; when a prefab finishes building a few frames late it reads the same `state` and automatically picks up the current progress.
 
-## 需要注意的坑
+## Gotchas
 
-- 预热布局：warmup mesh 必须用带 `chunkAnchor` 的几何体和转换后的材质，否则管线顶点布局不同，首次加载 prefab 时仍会编译卡顿。
-- 不要对包装几何体调用 `dispose()`：WebGPU 后端在几何体 dispose 时会释放它引用的所有 attribute 和 index，包括与源几何体共享的部分（`node_modules/three/src/renderers/common/Geometries.js` 约 186-202 行）。bucket 在 slot 生命周期内复用，最终销毁时直接丢弃引用即可。
-- 法线不再跟随缩放：方块各面轴对齐，视觉无差别；现在缩放为 0 时法线是退化的。
-- 过渡期间 CPU 射线检测拿到的是最终位置，不是动画中的位置。
-- `Resources` 里的 prefab GLTF 材质会被就地转换；如果这些资源还在别处使用，需要确认转换不影响那里。
+- Warmup layout: the warmup mesh must use a geometry with `chunkAnchor` and the converted material, otherwise the pipeline vertex layout differs and the first prefab load still causes a compile hitch.
+- Don't call `dispose()` on the wrapper geometry: when a geometry is disposed, the WebGPU backend releases all attributes and the index it references, including the parts shared with the source geometry (`node_modules/three/src/renderers/common/Geometries.js` lines ~186-202). Buckets are reused within the slot lifetime; just drop the reference when finally destroying them.
+- Normals no longer follow scaling: brick faces are axis-aligned, so there is no visible difference; normals are degenerate when scale is 0.
+- During the transition, CPU raycasting gets the final position, not the animated one.
+- Prefab GLTF materials in `Resources` are converted in place; if those resources are used elsewhere, confirm the conversion doesn't affect them.
 
-## 边界情况
+## Edge Cases
 
-- `columnDuration = 0`：除以 `max(1e-4)`，立即完成。
-- `chunkSize = 1`：`span` 取 1，`order` 为 0。
-- `transition.enabled = false`：走 `resetTransition()`，删除 `userData` 后着色器输出原位置。
-- `debugSpacing`：只改 `slot.group.position`，不影响 chunk 局部坐标。
+- `columnDuration = 0`: divided by `max(1e-4)`, completes immediately.
+- `chunkSize = 1`: `span` is 1, `order` is 0.
+- `transition.enabled = false`: goes through `resetTransition()`; after deleting `userData`, the shader outputs the original position.
+- `debugSpacing`: only changes `slot.group.position`, not chunk-local coordinates.
 
-## 验证
+## Verification
 
-1. `pnpm dev`，打开 `#debug` 后飞行；通过 `window.__experience` 找到一个 terrain mesh，确认过渡期间 `instanceMatrix.version` 不变。
-2. 与当前版本对比波浪方向（X/Z 轴、正向和反向），参数保持一致。
-3. 影子是否随列升起；prefab 晚几帧建好后是否与地形同步。
-4. 首次加载 prefab 是否出现新的编译卡顿（检查预热覆盖）。
-5. 切换 `transition.enabled`、调整 `debugSpacing`，确认没有残留位移。
-6. `pnpm test` 通过（当前没有直接覆盖 `ChunkColumnTransition` 的测试）。
+1. `pnpm dev`, open `#debug` and fly; find a terrain mesh through `window.__experience` and confirm `instanceMatrix.version` stays unchanged during the transition.
+2. Compare wave direction (X/Z axes, forward and reverse) against the current version, keeping parameters identical.
+3. Whether shadows rise with the columns, and whether prefabs that finish building a few frames late stay in sync with the terrain.
+4. Whether the first prefab load causes new compile hitches (check warmup coverage).
+5. Toggle `transition.enabled` and adjust `debugSpacing`, confirming there is no leftover displacement.
+6. `pnpm test` passes (there is currently no test directly covering `ChunkColumnTransition`).
