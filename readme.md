@@ -4,7 +4,7 @@ A little adventure with no finish line. Fly a brick-built plane through a proced
 
 [![A brick-built plane above the forest and riverbank](docs/readmeImg/optimized/hero.webp)](https://lego-stylized-nature.vercel.app/)
 
-**[Explore live ↗](https://lego-stylized-nature.vercel.app/)** · [Watch the flight](docs/readmeImg/optimized/flight-demo.mp4)
+**[Explore live ↗](https://lego-stylized-nature.vercel.app/)** · **[Play on Cloudflare Pages ↗](https://lego-stylized-nature.pages.dev)** · [Watch the flight](docs/readmeImg/optimized/flight-demo.mp4)
 
 ## Take flight
 
