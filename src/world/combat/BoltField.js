@@ -10,17 +10,22 @@ export default class BoltField {
   constructor(config = {}) {
     this.maxCount = Number.isFinite(config.boltCount) && config.boltCount > 0
       ? Math.floor(config.boltCount)
-      : 64
-    const size = Number.isFinite(config.boltSize) && config.boltSize > 0
-      ? config.boltSize
-      : 0.35
+      : 96
+    const length = Number.isFinite(config.boltLength) && config.boltLength > 0
+      ? config.boltLength
+      : 3
+    const width = Number.isFinite(config.boltWidth) && config.boltWidth > 0
+      ? config.boltWidth
+      : 0.12
 
     this.group = new THREE.Group()
     this.group.name = 'BoltField'
 
-    const geometry = new THREE.BoxGeometry(size, size * 0.5, size * 0.5)
+    // Long, thin glowing streaks: the long axis (X) points along the bolt's
+    // velocity, so each bolt reads as a tracer from the plane to the horizon.
+    const geometry = new THREE.BoxGeometry(length, width, width)
     const material = new THREE.MeshBasicMaterial({
-      color: 0xffb020,
+      color: 0xffc040,
       transparent: true,
       opacity: 0.95,
       blending: THREE.AdditiveBlending,
