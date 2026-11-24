@@ -1,75 +1,75 @@
-# 程序化 Prefab 迁移计划书
+# Procedural Prefab Migration Plan
 
-## 1. 目标与范围
+## 1. Goals and Scope
 
-把场景中由简单几何体组成的 biome prefab 从 GLB 改为 JS 程序生成，优先保持画面一致性，再减少几何体开销；现有放置、调色（biomeTints）与实例色（instanceColors）行为不变。轮廓、比例、厚度、缝隙、圆润边缘与材质高光均属于外观验收，不能为了面数目标省掉可见特征。
+Migrate scene biome prefabs made of simple geometry from GLB to JS procedural generation, prioritizing visual consistency first, then reducing geometry cost; existing placement, tinting (`biomeTints`), and instance color (`instanceColors`) behavior stays unchanged. Silhouette, proportion, thickness, gaps, rounded edges, and material highlights are all part of visual acceptance — don't drop visible features to hit a polygon target.
 
-2026-10-11 用户对草提出新设计要求：`landGrass` 改为短草、长草两款原创 LEGO 小草，均为 1×1 方底座；叶片比初稿加厚 50%。草以这组设计规格验收，不要求还原旧三种 GLB 的造型、包围盒或变体数量。
+2026-10-11: the user gave new design requirements for grass: `landGrass` becomes two original LEGO grass designs, short and tall, both on a 1×1 square base; blades are 50% thicker than the first draft. Grass is accepted against this design spec; it does not need to reproduce the old three GLBs' shapes, bounding boxes, or variant counts.
 
-2026-10-11 用户进一步明确本轮火山石、小仙人掌和芦苇的精度标准：物件在场景中显示很小，保留常用机位下可辨认的主要轮廓即可，三角面削减约 50% 或更多（剩余不超过原 GLB 的一半）。不追求精细复刻或微小几何细节，达标后停止无必要细化；透明渲染、落地、原色、投放和资源释放仍需正确。该标准优先于本文此前的细节还原要求。
+2026-10-11: the user further clarified this round's precision standard for volcano rock, small cactus, and reeds: the objects appear very small in the scene, so keep only the main recognizable silhouette at common camera positions; cut triangles by about 50% or more (remaining no more than half of the original GLB). Don't chase fine reproduction or tiny geometric details; stop unnecessary refinement once the standard is met; transparency rendering, grounding, original colors, placement, and resource release must still be correct. This standard takes priority over the detail-restoration requirements earlier in this document.
 
-**在范围内**：`src/assets/manifests/biomePrefabs.js` 中的几何体类 prefab（花、草、蘑菇、浮萍、芦苇、仙人掌、枯枝、火山石、气泡）。
+**In scope**: geometry-type prefabs in `src/assets/manifests/biomePrefabs.js` (flowers, grass, mushrooms, duckweed, reeds, cactus, dead bushes, volcano rock, bubbles).
 
-**不在范围内**（保持 GLB 不动）：
+**Out of scope** (keep GLB unchanged):
 
-- 有机造型：`skull.glb`、三种树（`tree` / `fruittree` / `Ctree`）。
-- 非 biome prefab：`legoBlock2x2.glb`（地形砖）、`fly.glb`（玩家）。
-- 已足够轻量的普通石头 `rock_1~4.glb`（20–34 面）。
+- Organic shapes: `skull.glb`, the three trees (`tree` / `fruittree` / `Ctree`).
+- Non-biome prefabs: `legoBlock2x2.glb` (terrain brick), `fly.glb` (player).
+- Already light enough ordinary rocks `rock_1~4.glb` (20–34 faces).
 
-**非目标**：不做每实例独立几何体、不做 L-system / 噪声位移、不做 shader 内几何变形、不做建模 DSL 或可视化编辑器。
+**Non-goals**: no per-instance independent geometry, no L-system / noise displacement, no in-shader geometry deformation, no modeling DSL or visual editor.
 
-## 2. 现状数据
+## 2. Current State Data
 
-### 2.1 面数与使用密度
+### 2.1 Triangle counts and usage density
 
-| prefab id | 源文件 | 三角面 | 投放（biome: 密度） | 材质槽 |
+| prefab id | Source file | Triangles | Placement (biome: density) | Material slots |
 |---|---|---|---|---|
 | `landFlower` | `flower.glb` | 3452 | forest 0.05, autumnForest 0.0225 | `flower_InstanceColor`, `flower_root` |
-| `volcanoRock` | `volcano_rock.glb` / `volcano_rock_2.glb` | 2054 / 1337 | volcano 0.09（权重 0.3 / 0.7） | `volcano_rock_InstanceColor`, `volcano_rock` |
+| `volcanoRock` | `volcano_rock.glb` / `volcano_rock_2.glb` | 2054 / 1337 | volcano 0.09 (weights 0.3 / 0.7) | `volcano_rock_InstanceColor`, `volcano_rock` |
 | `deadBush` | `dead_bush.glb` | 2691 | desert 0.02 | 1 |
 | `desertCactusSmall` | `cactus.glb` | 2374 | desert 0.0175 | 1 |
-| `waterDuckweed` | `duckweed.glb` | 2052 | forest 0.02, autumnForest 0.0175（水面） | 1 |
-| `phragmites` | `phragmites.glb` | 1056 | forest 0.015, autumnForest 0.0125（水面） | 1 mesh / 3 材质 |
+| `waterDuckweed` | `duckweed.glb` | 2052 | forest 0.02, autumnForest 0.0175 (water surface) | 1 |
+| `phragmites` | `phragmites.glb` | 1056 | forest 0.015, autumnForest 0.0125 (water surface) | 1 mesh / 3 materials |
 | `landGrass` | `grass.glb` / `grass_2.glb` / `grass_3.glb` | 328 / 224 / 719 | forest/autumn 0.06, desert 0.005 | 1 |
 | `landMushroom` | `mushroom_1.glb` | 492 | forest/autumn 0.03, desert 0.0025 | `leaf`, `mushroom_InstanceColor`, `mushroom_root` |
 | `waterBubble` | `bubble.glb` | 58 | forest 0.0125, autumnForest 0.01 | 1 |
 
-所有 prefab `castShadow = true`，阴影 pass 再绘制一遍，实际顶点处理量约为上表 ×2。
+All prefabs have `castShadow = true`; the shadow pass draws them again, so actual vertex processing is about 2× the table above.
 
-按「密度 × 面数」估算每 1000 格的面数：火山石约 15 万、花约 17 万（forest）、枯枝约 5 万、仙人掌约 4 万、浮萍约 4 万（每 1000 水面格）。迁移收益集中在前五项。
+Estimated triangles per 1000 cells from "density × triangles": volcano rock ~150k, flowers ~170k (forest), dead bushes ~50k, cactus ~40k, duckweed ~40k (per 1000 water cells). Migration gains concentrate on the top five.
 
-### 2.2 尺寸与原点（从 GLB 包围盒测得，单位：世界坐标）
+### 2.2 Sizes and origins (measured from GLB bounding boxes, units: world coordinates)
 
-| 源文件 | 尺寸 X×Y×Z | minY | XZ 中心 | 主色 |
+| Source file | Size X×Y×Z | minY | XZ center | Main color |
 |---|---|---|---|---|
-| `flower.glb` | 0.29×0.21×0.28 | 0 | (-0.05, 0.06) | LegoGreen `#418d4f`（sRGB） |
-| `volcano_rock.glb` | 0.13×0.19×0.14 | 0 | (-0.05, 0.05) | `#ff1f06`（opacity=0.7）+ `#1e1e1e` |
+| `flower.glb` | 0.29×0.21×0.28 | 0 | (-0.05, 0.06) | LegoGreen `#418d4f` (sRGB) |
+| `volcano_rock.glb` | 0.13×0.19×0.14 | 0 | (-0.05, 0.05) | `#ff1f06` (opacity=0.7) + `#1e1e1e` |
 | `volcano_rock_2.glb` | 0.09×0.10×0.08 | 0 | (-0.05, 0.06) | `#1e1e1e` |
 | `dead_bush.glb` | 0.10×0.18×0.08 | 0 | (-0.05, 0.05) | `#8d3b09` |
-| `cactus.glb` | 0.10×0.36×0.26 | 0 | (-0.05, 0.05) | 内嵌绿色图集，简化为面积加权均色 `#32692f` |
-| `duckweed.glb` | 0.14×0.07×0.13 | 0 | (-0.05, 0.06) | `#51b44c`（sRGB） |
-| `phragmites.glb` | 0.11×0.30×0.10 | 0 | (-0.05, 0.05) | `#4c7720` `#6b974b` `#b6945d`（sRGB） |
+| `cactus.glb` | 0.10×0.36×0.26 | 0 | (-0.05, 0.05) | Embedded green atlas, simplified to area-weighted average color `#32692f` |
+| `duckweed.glb` | 0.14×0.07×0.13 | 0 | (-0.05, 0.06) | `#51b44c` (sRGB) |
+| `phragmites.glb` | 0.11×0.30×0.10 | 0 | (-0.05, 0.05) | `#4c7720` `#6b974b` `#b6945d` (sRGB) |
 | `grass.glb` / `grass_2.glb` | 0.12×0.18 / 0.15×0.12 | 0 | (-0.05, 0.05) | `#0d5e15` |
 | `grass_3.glb` | 0.47×0.21×0.42 | 0 | (-0.05, 0.01) | `#006604` |
 | `mushroom_1.glb` | 0.09×0.12×0.09 | 0 | (-0.05, 0.05) | `#cccccc` `#950101` `#58512c` |
-| `bubble.glb` | 0.08×0.05×0.08 | 0 | (-0.05, 0.05) | 贴图 |
+| `bubble.glb` | 0.08×0.05×0.08 | 0 | (-0.05, 0.05) | Texture |
 
-### 2.3 必须保持的约束
+### 2.3 Constraints that must be kept
 
-1. **原点与凸点对齐**：`makePrefabTransform` 把实例放在格子中心 `(x + 0.5) * cellSize`、砖顶 `(height + 1) * layerHeight`。`cellSize = 0.2` 即一块 2×2 砖，凸点间距 0.1；源模型 XZ 中心都偏移到 `(-0.05, +0.05)`，正好落在一个凸点上，配合 `rotationStep = π/2` 随机落在四个凸点之一。程序模型必须以 `(-0.05, 0, 0.05)` 为底部中心构建，`minY = 0`。
-2. **mesh 命名约定**：
-   - 实例色：名称以 `_InstanceColor` 结尾（`matchesInstanceColorMesh`）。
-   - 树（本次不迁移）：名称含 `leaf` / `root`（`treeMaterial.js`）。
-3. **材质**：`resolvePrefabMaterial` / `resolveInstanceColorMaterial` 以源材质为缓存键克隆调色材质，因此同色零件应共享同一个材质实例。
-4. **draw call**：每个「变体 × mesh × biome 分桶」是一个 `InstancedMesh`，阴影再 ×1。每个 prefab 变体 ≤ 3，通常 mesh ≤ 2；蘑菇和芦苇保留三种原材质，使用 3 个槽。
+1. **Origin and stud alignment**: `makePrefabTransform` places an instance at the cell center `(x + 0.5) * cellSize`, brick top `(height + 1) * layerHeight`. `cellSize = 0.2` is one 2×2 brick, stud pitch 0.1; source models' XZ centers are all offset to `(-0.05, +0.05)`, landing exactly on one stud, and with `rotationStep = π/2` randomly landing on one of the four studs. Procedural models must be built with `(-0.05, 0, 0.05)` as the bottom center, `minY = 0`.
+2. **Mesh naming convention**:
+   - Instance color: names ending in `_InstanceColor` (`matchesInstanceColorMesh`).
+   - Trees (not migrated this time): names containing `leaf` / `root` (`treeMaterial.js`).
+3. **Materials**: `resolvePrefabMaterial` / `resolveInstanceColorMaterial` clone tint materials keyed by source material, so parts of the same color should share one material instance.
+4. **Draw calls**: each "variant × mesh × biome bucket" is one `InstancedMesh`, shadows ×1 more. Each prefab variant ≤ 3, usually mesh ≤ 2; mushrooms and reeds keep their three original materials, using 3 slots.
 
-## 3. 技术方案
+## 3. Technical Approach
 
-### 3.1 接入点：只改 `PrefabRegistry`
+### 3.1 Integration point: only change `PrefabRegistry`
 
-`PrefabPlacer.build()` 与 `PrefabPipelineWarmup` 都只通过 `prefabRegistry.getVariantAsset(id, i)?.scene` 取模型并遍历 mesh。构建函数返回与 `gltf.scene` 同结构的 `THREE.Group`，下游零改动。
+`PrefabPlacer.build()` and `PrefabPipelineWarmup` both get models only through `prefabRegistry.getVariantAsset(id, i)?.scene` and iterate meshes. A builder function returns a `THREE.Group` with the same structure as `gltf.scene`, so downstream needs zero changes.
 
-manifest 变体新增 `builder` 写法，与 `source` 并存：
+Manifest variants gain a `builder` form, coexisting with `source`:
 
 ```js
 landFlower: {
@@ -79,11 +79,11 @@ landFlower: {
     { builder: 'flower', weight: 0.5 }
   ],
   randomRotation: true,
-  instanceColors: { meshNameSuffix: '_InstanceColor', palette: [/* 不变 */] }
+  instanceColors: { meshNameSuffix: '_InstanceColor', palette: [/* unchanged */] }
 }
 ```
 
-`PrefabRegistry` 改动（约 20 行）：
+`PrefabRegistry` changes (about 20 lines):
 
 ```js
 getVariantAsset(prefabId, variantIndex) {
@@ -102,169 +102,169 @@ getBuiltAsset(prefabId, variantIndex, variant) {
   return this.builtAssets.get(key)
 }
 
-dispose() { /* 遍历 builtAssets，释放 geometry 与 material */ }
+dispose() { /* iterate builtAssets, release geometry and material */ }
 ```
 
-生命周期：GLB 几何体归 `Resources` 所有；程序几何体归 `PrefabRegistry` 所有，需在 `World.dispose()` 中调用 `prefabRegistry.dispose()`（当前 `world.js` 只把它置为 `null`）。
+Lifecycle: GLB geometry belongs to `Resources`; procedural geometry belongs to `PrefabRegistry` and must be released by calling `prefabRegistry.dispose()` in `World.dispose()` (currently `world.js` only sets it to `null`).
 
-### 3.2 文件结构
+### 3.2 File structure
 
 ```
 src/world/prefabs/builders/
   index.js            // export const prefabBuilders = { flower, volcanoRock, ... }
-  legoUnits.js        // 地形网格尺寸、实测凸点、prefab 原点
-  legoColors.js       // builder 命名色板
-  prefabParts.js      // 几何零件、makePrefabScene
+  legoUnits.js        // terrain grid sizes, measured studs, prefab origin
+  legoColors.js       // builder named color palette
+  prefabParts.js      // geometry parts, makePrefabScene
   flower.js
   volcanoRock.js
   ...
 ```
 
-### 3.3 公共工具 `prefabParts.js`
+### 3.3 Shared utilities `prefabParts.js`
 
-- **单位常量**（地形即真实 LEGO 比例：2×2 砖 = `cellSize`，砖高 ≈ 1.2 × 凸点间距）：
-  - `STUD_PITCH = cellSize / 2 = 0.1`、`BRICK_HEIGHT = layerHeight = 0.095`、`PLATE_HEIGHT = layerHeight / 3 ≈ 0.032`。
-  - 实测凸点半径 `STUD_RADIUS = 0.035`、高 `STUD_HEIGHT = 0.019`；砖可见顶面在 prefab 原点上方约 0.006，凸点顶面约 0.025。
-  - `PREFAB_ORIGIN = [-0.05, 0, 0.05]`。
-- **Phase 1 零件 API**：`cylinder({ radius, height, segments, top, bottom })`、`box({ width, height, depth, bottom })`、`flowerPlate({ outerRadius, innerRadius, height, petals })`、`stud()`。尺寸使用世界坐标，底面从 `y = 0` 起建，板高与凸点尺寸来自 `legoUnits.js`；后续可按需要增加 LEGO 单位包装。
-- **`stud()`**：当前默认 6 段圆柱、底面开口，18 面；可按轮廓与高光需要增加分段或小倒角，不受 6–8 段限制。
-- **`makePrefabScene(slots)`**：输入 `[{ name, color, parts: BufferGeometry[] }]`，最多两个槽。合并前使用独立的 Float32 `position` / `normal` 缓冲，不保留 `uv`；缺失法线时计算法线，对非索引几何体做 `mergeVertices`，保证索引与属性一致。每个槽合并为一个 mesh，整体平移到 `PREFAB_ORIGIN`，返回 `THREE.Group`。函数接管临时零件并在合并后释放，返回资源归 registry 所有。
-- **槽材质**：基于 `createLegoMaterial()`（`src/materials/tsl/legoMaterial.js`，与地形砖相同的 Physical + clearcoat/sheen 参数）设置颜色。同色零件已合并进同一个槽，因此每个槽一个材质实例即满足约束 3，不需要全局颜色缓存；材质随构建结果归 `PrefabRegistry` 所有并由其释放。`resolvePrefabMaterial` / `resolveInstanceColorMaterial` 使用 `clone()`，塑料参数随之保留。
-- **色板**：builder 只从命名色板取色，不直接写十六进制。
+- **Unit constants** (terrain is true LEGO scale: a 2×2 brick = `cellSize`, brick height ≈ 1.2 × stud pitch):
+  - `STUD_PITCH = cellSize / 2 = 0.1`, `BRICK_HEIGHT = layerHeight = 0.095`, `PLATE_HEIGHT = layerHeight / 3 ≈ 0.032`.
+  - Measured stud radius `STUD_RADIUS = 0.035`, height `STUD_HEIGHT = 0.019`; the brick's visible top face is about 0.006 above the prefab origin, the stud top about 0.025.
+  - `PREFAB_ORIGIN = [-0.05, 0, 0.05]`.
+- **Phase 1 part API**: `cylinder({ radius, height, segments, top, bottom })`, `box({ width, height, depth, bottom })`, `flowerPlate({ outerRadius, innerRadius, height, petals })`, `stud()`. Sizes use world coordinates, built from the bottom at `y = 0`; plate height and stud sizes come from `legoUnits.js`; add LEGO-unit wrappers later as needed.
+- **`stud()`**: currently defaults to a 6-segment open-bottom cylinder, 18 faces; increase segments or add small bevels as silhouette and highlight needs require — not limited to 6–8 segments.
+- **`makePrefabScene(slots)`**: input `[{ name, color, parts: BufferGeometry[] }]`, at most two slots. Before merging, use independent Float32 `position` / `normal` buffers, no `uv`; compute normals when missing, run `mergeVertices` on non-indexed geometry to keep index and attributes consistent. Each slot merges into one mesh, the whole thing translates to `PREFAB_ORIGIN`, and returns a `THREE.Group`. The function takes ownership of temporary parts and releases them after merging; returned resources belong to the registry.
+- **Slot materials**: based on `createLegoMaterial()` (`src/materials/tsl/legoMaterial.js`, same Physical + clearcoat/sheen parameters as terrain bricks) with colors set. Since same-color parts are already merged into one slot, one material instance per slot satisfies constraint 3 — no global color cache needed; materials belong to `PrefabRegistry` with the build result and are released by it. `resolvePrefabMaterial` / `resolveInstanceColorMaterial` use `clone()`, so the plastic parameters carry over.
+- **Palette**: builders only take colors from the named palette, never writing hex directly.
 
-### 3.4 构建函数约定
+### 3.4 Builder function contract
 
-- 纯函数：`build(params) => THREE.Group`，同参数同结果，不读随机数（多样性来自 manifest 的多个变体和实例旋转/颜色）。
-- 优先使用基本体或简单自定义几何体；分段数按参考模型和实际机位决定，可增加弧面细分、细茎分段、球面细分与小倒角。
-- 零件先 `rotate*` / `translate` 到位再交给 `makePrefabScene`。
-- 风格以 LEGO 零件为词汇：圆板、砖、锥、植物叶片件、凸点；还原参考模型的可见造型，不要求顶点布局相同。
-- 可见圆润边缘按需要用几何倒角与合适的法线表现；AO 与 clearcoat 配合几何体使用。
+- Pure functions: `build(params) => THREE.Group`, same params give same result, no random numbers read (variety comes from the manifest's multiple variants and instance rotation/colors).
+- Prefer primitives or simple custom geometry; segment counts follow the reference model and actual camera positions — arc subdivision, thin-stem segments, sphere subdivision, and small bevels can be increased.
+- Parts are `rotate*` / `translate`d into place before being handed to `makePrefabScene`.
+- Style vocabulary is LEGO parts: round plates, bricks, cones, plant leaf pieces, studs; reproduce the reference model's visible shape — vertex layout need not match.
+- Rounded visible edges use geometric bevels and suitable normals as needed; AO and clearcoat work together with the geometry.
 
-### 3.4.1 面数规则
+### 3.4.1 Triangle rules
 
-- **优先去掉确认不可见的面**：贴地或完全被覆盖的底面/盖面可移除；水面、缝隙和斜视角中能看见的底部与连接面必须保留。
-- **分段数按外观选择**：当前默认分段仅是起点，圆板可用 12–24 段，细茎可用 6–8 段；近景轮廓或高光需要时继续增加。不可用低分段多面体替代参考模型的圆润特征。
-- 不保留 `uv`，几何体保持索引。
-- 同材质零件合并为一个 mesh，通常每变体 ≤ 2 槽（普通 + `_InstanceColor`）；蘑菇和芦苇为保留三种原材质使用 3 槽。
-- 可选：小型地被（浮萍、草、气泡）关闭投影，阴影 pass 顶点量减半。需在 manifest 增加 `castShadow` 字段，并替换 `PrefabPlacer` / `PrefabPipelineWarmup` 中硬编码的 `castShadow = true`，作为单独提交。
+- **Remove confirmed-invisible faces first**: bottoms/caps that sit on the ground or are fully covered can be removed; bottoms and joints visible from water, gaps, or angled views must be kept.
+- **Choose segment counts by appearance**: current default segments are only a starting point — round plates can use 12–24 segments, thin stems 6–8; keep increasing when close-up silhouettes or highlights need it. Don't replace a reference model's rounded features with a low-segment polyhedron.
+- Don't keep `uv`; geometry stays indexed.
+- Parts of the same material merge into one mesh, usually ≤ 2 slots per variant (normal + `_InstanceColor`); mushrooms and reeds use 3 slots to keep their three original materials.
+- Optional: small ground cover (duckweed, grass, bubbles) can disable shadows, halving shadow-pass vertex count. This needs a `castShadow` field added to the manifest and replacing the hardcoded `castShadow = true` in `PrefabPlacer` / `PrefabPipelineWarmup`, as a separate commit.
 
-### 3.5 参考面数预算（可调整）
+### 3.5 Reference triangle budgets (adjustable)
 
-2026-10-10 按用户要求调整：视觉一致性优先，以下数字是初始参考预算，不是测试硬上限，也不要求把剩余额度用满。超出参考值时记录保留的可见细节与同机位场景开销，再决定是否继续简化。自动化只检查模型非空、面数低于原 GLB，以及索引/mesh 等结构约束；它不保证大幅减面或外观一致。draw call 与帧时间仍需实际检查。
+Adjusted 2026-10-10 per user request: visual consistency first; the numbers below are initial reference budgets, not hard test limits, and there's no requirement to use up the remaining allowance. When exceeding a reference value, record the visible detail kept and the same-camera scene cost, then decide whether to simplify further. Automation only checks that models are non-empty, below the original GLB triangle count, and meet index/mesh structural constraints; it doesn't guarantee large triangle reductions or visual consistency. Draw calls and frame time still need real checks.
 
-| prefab | 原 GLB | 参考预算 | 构建思路 |
+| prefab | Original GLB | Reference budget | Build approach |
 |---|---|---|---|
-| `landFlower` | 3452 | 600 | 保留三朵花、叶片与凸点；按参考轮廓补圆润花瓣、茎和边缘，当前 206 面 |
-| `volcanoRock` 变体 0 | 2054 | 500 | 保留倒角矩形底座、阶梯岩体和错落半透明晶柱；晶簇交叠处只保留连续外壳，避免透明内部面重复混色 |
-| `volcanoRock` 变体 1 | 1337 | 300 | 保留原岩体的体积比例、轮廓与主要切面 |
-| `deadBush` | 2691 | 500 | 保留分叉拓扑与枝条粗细变化，连接处按需要细分 |
-| `desertCactusSmall` | 2374 | 600 | 方砖主干、L 形侧臂、顶部与侧面凸点，按场景尺寸简化倒角和分段 |
-| `waterDuckweed` | 2052 | 240 | 保留叶瓣、十字缝隙、厚度与短支撑，允许增加圆弧分段和边缘倒角；当前四瓣版本 88 面 |
-| `phragmites` | 1056 | 300 | 保留细茎、宽叶和棕色穗的主要轮廓，使用三种原色材质槽 |
-| `landGrass` 短/长 | 原三款 328/224/719 | 360/640 | 原创三叶短草与五叶长草，同为 1×1 倒角方底座，厚实弯曲叶片；实际 322/568 面 |
-| `landMushroom` | 492 | 200 | 保留伞盖曲率、边缘厚度、菌柄与小叶 |
-| `waterBubble` | 58 | 58 | 以原有球面外观为准；收益很小，可保留 GLB |
+| `landFlower` | 3452 | 600 | Keep three flowers, leaves, and studs; add rounded petals, stems, and edges following the reference silhouette; currently 206 faces |
+| `volcanoRock` variant 0 | 2054 | 500 | Keep the chamfered rectangular base, stepped rock body, and staggered translucent crystal columns; at crystal cluster overlaps keep only the continuous outer shell to avoid repeated color blending from transparent inner faces |
+| `volcanoRock` variant 1 | 1337 | 300 | Keep the original rock body's volume proportions, silhouette, and main cut faces |
+| `deadBush` | 2691 | 500 | Keep the branching topology and branch thickness variation, subdividing joints as needed |
+| `desertCactusSmall` | 2374 | 600 | Square-brick trunk, L-shaped side arm, top and side studs, simplifying bevels and segments for scene scale |
+| `waterDuckweed` | 2052 | 240 | Keep leaf lobes, cross-shaped gaps, thickness, and short supports; arc segments and edge bevels may be increased; current four-lobe version is 88 faces |
+| `phragmites` | 1056 | 300 | Keep the main silhouette of thin stems, wide leaves, and brown ears, using the three original color material slots |
+| `landGrass` short/tall | original three 328/224/719 | 360/640 | Original three-leaf short grass and five-leaf tall grass, both on 1×1 chamfered square bases with thick curved blades; actual 322/568 faces |
+| `landMushroom` | 492 | 200 | Keep cap curvature, edge thickness, stem, and small leaves |
+| `waterBubble` | 58 | 58 | Match the original spherical appearance; gains are tiny, GLB may be kept |
 
-## 4. 实施阶段
+## 4. Implementation Phases
 
-### Phase 0：准备（无功能变化）
+### Phase 0: Preparation (no functional change)
 
-2026-10-10 基线：`node --test` 共 252 项，242 通过、10 失败（aircraftInput 3、environmentShadowFollow 1、prefabInstanceColorConfig 2、tiltShiftPostProcessing 2、worldCameraFollow 2）。同机位前台渲染基线：triangles=29,285,574，drawCalls=327，frame=16.60ms，GPU=5.37ms。seed=20260608，viewport=1920×911，DPR=1，9 个 chunk，飞机未移动（保留当前 height=7.2，position=[12.8,7.2,12.8]）。首次后台采样有节流，已丢弃并在前台重新采样；帧时间是单次观察值，不代表统计基准。
+2026-10-10 baseline: `node --test` totals 252 items, 242 passing, 10 failing (aircraftInput 3, environmentShadowFollow 1, prefabInstanceColorConfig 2, tiltShiftPostProcessing 2, worldCameraFollow 2). Same-camera foreground render baseline: triangles=29,285,574, drawCalls=327, frame=16.60ms, GPU=5.37ms. seed=20260608, viewport=1920×911, DPR=1, 9 chunks, aircraft unmoved (keep current height=7.2, position=[12.8,7.2,12.8]). The first background sample was throttled, discarded, and resampled in the foreground; frame time is a single observation, not a statistical baseline.
 
-1. 运行 `pnpm test` 记录基线。已知 `test/prefabInstanceColorConfig.test.js` 当前 2/3 失败（manifest 的调色板与蘑菇权重和测试期望不一致），与本迁移无关，需先确认以 manifest 为准还是以测试为准。
-2. 在 `pnpm dev` + `#debug` 下固定 seed 与机位，记录 forest / desert / volcano 三处的 `renderer.info.render.triangles`、draw calls 与帧时间作为对比基线。
-3. 从 `legoBlock2x2.glb` 量取凸点半径与高度，写入 `prefabParts.js` 常量。
+1. Run `pnpm test` and record the baseline. Note that `test/prefabInstanceColorConfig.test.js` currently fails 2/3 (the manifest palette and mushroom weights disagree with test expectations), unrelated to this migration — first confirm whether the manifest or the tests are the source of truth.
+2. In `pnpm dev` + `#debug` with a fixed seed and camera, record `renderer.info.render.triangles`, draw calls, and frame time at forest / desert / volcano as comparison baselines.
+3. Measure stud radius and height from `legoBlock2x2.glb` and write them into the `prefabParts.js` constants.
 
-### Phase 1：基础设施 + 试点 `landFlower`
+### Phase 1: Infrastructure + pilot `landFlower`
 
-1. 新增 `prefabParts.js`、`builders/index.js`、`builders/flower.js`。
-2. `PrefabRegistry` 支持 `builder` 变体与 `dispose()`；`World.dispose()` 调用它。
-3. manifest 中 `landFlower` 改为 builder 变体（调色板、密度不变）。
-4. 新增 `test/prefabBuilders.test.js`（见第 5 节）。
-5. 视觉对比通过后，删除 `flower.glb` 与 `sources.js` 中的 `landFlowerModel`。
+1. Add `prefabParts.js`, `builders/index.js`, `builders/flower.js`.
+2. `PrefabRegistry` supports `builder` variants and `dispose()`; `World.dispose()` calls it.
+3. In the manifest, switch `landFlower` to a builder variant (palette and density unchanged).
+4. Add `test/prefabBuilders.test.js` (see Section 5).
+5. After the visual comparison passes, delete `flower.glb` and the `landFlowerModel` entry in `sources.js`.
 
-验收：花外观风格一致、实例色正常、`flower_InstanceColor` 无缺失警告，forest 场景三角面明显下降。
+Acceptance: flower appearance is stylistically consistent, instance colors work, no missing warnings for `flower_InstanceColor`, and forest scene triangle count drops clearly.
 
-2026-10-10 实施结果：基础设施与 `landFlower` 已接入，花的 root=62 面、花头=144 面，合计 206 面（较原 GLB 减少 94.03%），保持两个 mesh、原权重及放置/调色配置。修正第一片叶子的连接位置，射线测试覆盖叶片与茎的相交。相同 seed、视口和初始机位下：triangles=27,299,022（减少 6.78%），drawCalls=327，frame≈16.70ms，GPU≈5.05ms；两次采样均约 60Hz，不据此宣称帧率提升。视觉检查通过，控制台无新增缺失实例色 mesh / capacity / 渲染告警；移除旧 GLB 和 source。新增 24 项测试，全量 276 项、266 通过，仍仅有上述 10 项既有失败；生产构建通过。改动保留在工作区，未自动提交。
+2026-10-10 implementation result: infrastructure and `landFlower` are integrated; flower root=62 faces, flower head=144 faces, 206 total (94.03% fewer than the original GLB), keeping two meshes, original weights, and placement/tint config. Fixed the first leaf's connection position; ray tests cover leaf and stem intersections. With the same seed, viewport, and initial camera: triangles=27,299,022 (down 6.78%), drawCalls=327, frame≈16.70ms, GPU≈5.05ms; both samples around 60Hz — don't claim a frame-rate improvement from this. Visual check passed, console has no new missing instance-color mesh / capacity / render warnings; old GLB and source removed. 24 new tests added; full suite 276 items, 266 passing, still only the same 10 pre-existing failures; production build passes. Changes kept in the workspace, not auto-committed.
 
-### Phase 2：高收益项
+### Phase 2: High-value items
 
-已完成 `waterDuckweed`，剩余建议顺序：`volcanoRock` → `deadBush` → `desertCactusSmall`。每项独立验证：新增 builder → 改 manifest → 跑测试 → 视觉对比 → 删除 GLB 与 source。
+`waterDuckweed` is done; remaining suggested order: `volcanoRock` → `deadBush` → `desertCactusSmall`. Each item verified independently: add builder → change manifest → run tests → visual comparison → delete GLB and source.
 
-2026-10-10 浮萍初版结果（历史记录）：新增 `builders/duckweed.js` 并注册 `duckweed`，`waterDuckweed` 保持一个变体、weight=1、水面放置、随机 90° 旋转、原 forest/autumnForest 密度与投影行为。原 GLB 的线性材质颜色换算为 sRGB `#51b44c`，已校正色板与上表。初版由相互连接的支撑和两片椭圆叶组成，56 面、一个 mesh，尺寸 0.130×0.068×0.1344，min.y≈0，XZ 中心 (-0.05,0.056)；较原 2052 面减少 97.27%。
+2026-10-10 duckweed first-version result (historical record): added `builders/duckweed.js` and registered `duckweed`; `waterDuckweed` keeps one variant, weight=1, water-surface placement, random 90° rotation, original forest/autumnForest density and shadow behavior. The original GLB's linear material color converts to sRGB `#51b44c`; palette and table above corrected. The first version consists of connected supports and two elliptical leaves, 56 faces, one mesh, size 0.130×0.068×0.1344, min.y≈0, XZ center (-0.05,0.056); 97.27% fewer faces than the original 2052.
 
-相同 seed=20260608、1920×911 视口、DPR=1、9 个 chunk 和初始机位（飞机 position=[12.8,7.2,12.8]）下，triangles 从 27,299,022 降至 27,097,426，减少 201,596 面（0.74%）；drawCalls 均为 327，frame 单次观察约 16.6/16.8ms，不据此宣称帧率提升。视觉检查通过，控制台无新增告警，已移除 `duckweed.glb` 和 `waterDuckweedModel` source。新增 6 项测试；全量 282 项、272 通过，仍为相同 10 项既有失败，生产构建通过。所有改动保留在工作区，未自动提交。
+With the same seed=20260608, 1920×911 viewport, DPR=1, 9 chunks, and initial camera (aircraft position=[12.8,7.2,12.8]), triangles dropped from 27,299,022 to 27,097,426 — 201,596 fewer faces (0.74%); drawCalls were 327 in both, frame single observation about 16.6/16.8ms — don't claim a frame-rate improvement from this. Visual check passed, console has no new warnings, `duckweed.glb` and the `waterDuckweedModel` source removed. 6 new tests added; full suite 282 items, 272 passing, still the same 10 pre-existing failures, production build passes. All changes kept in the workspace, not auto-committed.
 
-后续工作区已将浮萍调整为四瓣开缝造型，当前实测 88 面、一个 mesh，尺寸约 0.1317×0.066×0.1317。上述场景性能数据只对应 56 面初版。本次预算调整保留当前造型，未增加模型面数；后续以第 3.5 节和第 5.2 节的视觉优先标准验收。
+The workspace has since adjusted duckweed to a four-lobe slitted shape, currently measured at 88 faces, one mesh, size about 0.1317×0.066×0.1317. The scene performance data above only corresponds to the 56-face first version. This budget adjustment keeps the current shape without adding model faces; acceptance follows the visual-first standard in Sections 3.5 and 5.2.
 
-2026-10-11 火山石结果：新增 `builders/volcanoRock.js`，注册 `volcanoRock` / `volcanoRockSmall`。两款仍共用同一深灰岩体的形状，大款增加错落方晶柱和低部连续透明核心。大款 611 面（深灰 272 + 晶体 339），较原 2054 面减少 70.25%；小款 272 面，较原 1337 面减少 79.66%，分别保留 2 / 1 个 mesh。尺寸约 0.12556×0.18870×0.14389 / 0.08922×0.09955×0.08026，min.y=0。按用户新标准已达标，不继续细化。
+2026-10-11 volcano rock result: added `builders/volcanoRock.js`, registering `volcanoRock` / `volcanoRockSmall`. Both still share the same dark-gray rock body shape; the large one adds staggered square crystal columns and a low continuous transparent core. Large: 611 faces (dark gray 272 + crystals 339), 70.25% fewer than the original 2054; small: 272 faces, 79.66% fewer than the original 1337, keeping 2 / 1 meshes respectively. Sizes about 0.12556×0.18870×0.14389 / 0.08922×0.09955×0.08026, min.y=0. Meets the user's new standard; no further refinement.
 
-保留两款权重 0.3 / 0.7、volcano 地面投放、density=0.09、minHeight=5、maxSlope=3、90° 随机旋转、阴影与原五色调色板。色板按原 GLB 的线性颜色换算为 sRGB：岩体 `#1e1e1e`，晶体 `#ff1f06`；晶体保留 opacity=0.7、metalness=0.064、roughness=0.314、DoubleSide 和 `depthWrite=false`。透明晶簇只保留连续外壳，剔除交叠内部面，避免重复 alpha 混合。小款原本没有 `_InstanceColor` mesh，保持固定深灰及原有一次性诊断。
+Keep both weights 0.3 / 0.7, volcano ground placement, density=0.09, minHeight=5, maxSlope=3, 90° random rotation, shadows, and the original five-color tint palette. Palette converts from the original GLB's linear colors to sRGB: rock `#1e1e1e`, crystals `#ff1f06`; crystals keep opacity=0.7, metalness=0.064, roughness=0.314, DoubleSide, and `depthWrite=false`. Transparent crystal clusters keep only the continuous outer shell, removing overlapping inner faces to avoid repeated alpha blending. The small one originally had no `_InstanceColor` mesh; keep its fixed dark gray and the original one-time diagnostic.
 
-火山石专属 6 项、builder/grass/parts/registry/warmup 相关共 62 项测试通过。授权视觉核查确认最终 611 / 272 版本落地与阴影正常，调色仅影响大款晶体，预览浏览器无 error/warn；用户也反馈实际火山地形显示正常。旧两个火山石 GLB 和 source 已移除，临时原模型对照页已清理。没有采集同机位帧时间，不据此宣称帧率提升；最终全量测试和生产构建随本批次一起记录。
+6 volcano-rock-specific tests, plus 62 tests related to builder/grass/parts/registry/warmup, pass. Authorized visual review confirmed the final 611 / 272 versions land correctly with normal shadows, tinting affects only the large crystals, and the preview browser shows no error/warn; the user also reported the volcano terrain displays correctly in practice. The two old volcano rock GLBs and sources are removed, and the temporary original-model comparison page is cleaned up. No same-camera frame times were collected — don't claim a frame-rate improvement from this; final full-test and production-build results are recorded with this batch.
 
-本地预览：`http://localhost:5173/debug/volcano-rock-preview.html`，可并排旋转、缩放、复位和切换五色；独立调试入口不包含在默认生产 HTML 入口中。
+Local preview: `http://localhost:5173/debug/volcano-rock-preview.html`, with side-by-side rotate, zoom, reset, and five-color switching; the standalone debug entry is not included in the default production HTML entries.
 
-### Phase 3：剩余项
+### Phase 3: Remaining items
 
-`landGrass` 已完成（按用户新要求设计为短/长两款），`landMushroom` 已接入 builder；剩余：`phragmites` → `waterBubble`（可选）。
+`landGrass` is done (designed as short/tall per the user's new requirements), `landMushroom` is hooked into a builder; remaining: `phragmites` → `waterBubble` (optional).
 
-2026-10-11 草实施结果：新增 `builders/grass.js`，注册 `grassShort` / `grassTall`。共用宽深 `STUD_PITCH=0.1`、高 `PLATE_HEIGHT≈0.03167` 的 1×1 倒角方底座，原点仍为 `(-0.05,0,0.05)`。短草三片叶，总高约 0.14167、322 面；长草五片错落叶，总高约 0.25167、568 面。叶片为封闭厚实弯曲几何体，叶根嵌入根环和底座；按用户反馈将截面厚度参数从 0.006 增至 0.009（+50%，参数为半厚度，叶尖沿曲线渐细），不增加三角面。每款一个 `grass_root` mesh，使用现有绿色 LEGO 塑料材质。
+2026-10-11 grass implementation result: added `builders/grass.js`, registering `grassShort` / `grassTall`. Both share a 1×1 chamfered square base of width/depth `STUD_PITCH=0.1` and height `PLATE_HEIGHT≈0.03167`, with origin still `(-0.05,0,0.05)`. Short grass has three blades, total height about 0.14167, 322 faces; tall grass has five staggered blades, total height about 0.25167, 568 faces. Blades are enclosed thick curved geometry, blade roots embedded in the root ring and base; per user feedback the cross-section thickness parameter was raised from 0.006 to 0.009 (+50%, the parameter is half-thickness, blades taper toward the tip along the curve), without adding triangles. Each uses one `grass_root` mesh with the existing green LEGO plastic material.
 
-manifest 将旧两种普通草的权重 `1+1` 合为短草 `2`，长草沿用旧大簇的 `0.25`，保持普通/稀有草的总权重比例；具体单格变体会随新设计改变。forest/autumnForest/desert 的原密度、地面高度/坡度限制、90° 随机旋转、biome tint、阴影行为保持不变。移除三个旧草 source 及 `grass.glb` / `grass_2.glb` / `grass_3.glb`。自动化尺寸检查采用新设计尺寸，专门用射线检查四种旋转下的 1×1 底座；允许叶片略超出底座外沿。
+The manifest merges the old two ordinary grasses' weights `1+1` into short grass `2`, while tall grass keeps the old large cluster's `0.25`, preserving the ordinary/rare grass total weight ratio; per-cell variants will change with the new design. Original forest/autumnForest/desert density, ground height/slope limits, 90° random rotation, biome tint, and shadow behavior are unchanged. The three old grass sources and `grass.glb` / `grass_2.glb` / `grass_3.glb` are removed. Automated size checks use the new design sizes, with dedicated ray checks for the 1×1 base under all four rotations; blades may slightly extend past the base edge.
 
-草单项验证快照：相同 seed=20260608、1920×911 视口、DPR=1 和初始机位下，triangles 从 27,319,754 增至 27,338,641（+18,887，约 +0.069%），drawCalls 从 327 降至 314，geometries 从 39 降至 38。模型开销略增是厚叶和倒角的设计取舍，未宣称本次大幅减面；帧时间单次观察约 16.6/16.7ms，不作为帧率提升证据。独立预览及场景视觉检查通过，运行场景控制台无新增告警。草新增 13 项测试，接入时全量 295 项、285 通过，仍仅有基线相同 10 项失败；生产构建通过。保留工作区并行进行的蘑菇接入改动后，再次验证全量 298 项、289 通过，9 项失败均属于原有失败项；草、builder 与 warmup 的 36 项相关测试全部通过。改动保留在工作区，未自动提交。
+Grass single-item verification snapshot: with the same seed=20260608, 1920×911 viewport, DPR=1, and initial camera, triangles rose from 27,319,754 to 27,338,641 (+18,887, about +0.069%), drawCalls dropped from 327 to 314, geometries from 39 to 38. The slight model cost increase is a design tradeoff of thick blades and bevels; no large triangle reduction is claimed for this change; frame time single observation about 16.6/16.7ms, not evidence of a frame-rate improvement. Standalone preview and scene visual checks passed; the running scene console has no new warnings. Grass added 13 tests; at integration the full suite was 295 items, 285 passing, still only the same 10 baseline failures; production build passes. After keeping the mushroom integration changes that were in progress in the workspace in parallel, re-verification showed the full suite at 298 items, 289 passing, with 9 failures all belonging to the original failure set; all 36 grass, builder, and warmup related tests pass. Changes kept in the workspace, not auto-committed.
 
-本地设计预览：运行 Vite 后打开 `/debug/grass-preview.html`，可并排查看两款小草、拖动旋转、缩放和复位；该独立调试页面不包含在默认生产构建入口中。
+Local design preview: after running Vite, open `/debug/grass-preview.html` to view the two grasses side by side, drag to rotate, zoom, and reset; the standalone debug page is not included in the default production build entries.
 
-2026-10-11 后续比例调整：按用户截图和追加要求，两款小草的叶簇及根环均以底座顶面为中心整体放大 1.5 倍，保留 1×1 方底座。当前短草尺寸约 0.12777×0.19667×0.13292，长草约 0.14764×0.36167×0.18404；允许叶片超出底座边缘。面数仍为 322/568，叶根与根环仍嵌入底座。已同步尺寸验收，32 项草与 builder 测试全部通过，生产构建通过。
+2026-10-11 follow-up proportion adjustment: per the user's screenshot and additional requirements, both grasses' blade clusters and root rings were scaled up 1.5× as a whole around the base top surface, keeping the 1×1 square base. Current short grass is about 0.12777×0.19667×0.13292, tall grass about 0.14764×0.36167×0.18404; blades may extend past the base edge. Face counts remain 322/568, blade roots and root rings still embedded in the base. Size acceptance synced; all 32 grass and builder tests pass, production build passes.
 
-### Phase 4：清理
+### Phase 4: Cleanup
 
-- 删除未被加载的 `pumice.glb`、`pine.glb`、`coconut_tree.glb`。
-- 若所有 builder 变体都已迁移，确认 `sources.js` 中不再有对应条目，`Resources` 加载项相应减少。
-- 更新 `AGENTS.md` 中关于 prefab 来源的说明（若有）。
+- Delete the unloaded `pumice.glb`, `pine.glb`, `coconut_tree.glb`.
+- Once all builder variants are migrated, confirm no corresponding entries remain in `sources.js`, with `Resources` load items reduced accordingly.
+- Update the `AGENTS.md` notes about prefab sources (if any).
 
-## 5. 验证方案
+## 5. Verification Plan
 
-### 5.1 自动化：`test/prefabBuilders.test.js`
+### 5.1 Automation: `test/prefabBuilders.test.js`
 
-对 `prefabBuilders` 中每个构建函数及 manifest 中每个 builder 变体：
+For each builder function in `prefabBuilders` and each builder variant in the manifest:
 
-- **几何开销**：遍历 mesh 统计 `index.count / 3`，模型非空且面数低于对应原 GLB；第 3.5 节参考预算用于视觉与性能审阅，不作为测试硬上限。每新增一个 builder 同时补充原 GLB 基线。
-- **命名**：若原变体包含可调色部分，至少一个 mesh 名匹配 `meshNameSuffix`。小火山石原 GLB 仅包含固定深灰岩体，保留这一例外；专门验证大款五色正常、小款不被染色，且原有缺失调色 mesh 的一次性诊断不增加。
-- **原点**：整体包围盒 `min.y ≈ 0`（±0.005），XZ 中心 ≈ `(-0.05, 0.05)`（±0.02）。
-- **尺寸**：还原型 prefab 的包围盒与第 2.2 节原 GLB 尺寸误差 ±25%；用户要求的原创草按短/长新设计尺寸检查，底座必须为 1×1。
-- **manifest 完整性**：每个变体要么 `source` 存在于 `sources.js`，要么 `builder` 存在于 `prefabBuilders`。
-- **释放**：`PrefabRegistry.dispose()` 后几何体与材质的 `dispose` 被调用。
+- **Geometry cost**: iterate meshes and count `index.count / 3`; models must be non-empty with fewer faces than the corresponding original GLB; the Section 3.5 reference budgets are for visual and performance review, not hard test limits. Add the original GLB baseline whenever a new builder is added.
+- **Naming**: if the original variant has a tintable part, at least one mesh name must match `meshNameSuffix`. The small volcano rock's original GLB contains only fixed dark-gray rock, keeping this exception; specifically verify the large one tints in five colors, the small one is not tinted, and the original missing-tint-mesh one-time diagnostic doesn't increase.
+- **Origin**: overall bounding box `min.y ≈ 0` (±0.005), XZ center ≈ `(-0.05, 0.05)` (±0.02).
+- **Size**: for reproduction-style prefabs, bounding box vs. the Section 2.2 original GLB sizes within ±25%; user-requested original grass is checked against the short/tall new design sizes, and the base must be 1×1.
+- **Manifest integrity**: each variant either has a `source` in `sources.js` or a `builder` in `prefabBuilders`.
+- **Release**: after `PrefabRegistry.dispose()`, geometry and material `dispose` are called.
 
-现有 `prefabPlacer*.test.js`、`prefabPipelineWarmup.test.js` 应无需修改即可通过；若其中构造了 mock registry，保持不变。
+Existing `prefabPlacer*.test.js` and `prefabPipelineWarmup.test.js` should pass unchanged; if they construct a mock registry, keep them unchanged.
 
-### 5.2 手动
+### 5.2 Manual
 
-- `pnpm dev` + `#debug`，用 Phase 0 的固定 seed 与机位对比三角面、draw calls、帧时间。
-- 对照原 GLB 的常用机位与近景斜视角，检查轮廓、比例、叶片/枝条数量、缝隙、厚度、圆润边缘、材质高光和阴影；包围盒尺寸通过不能代替外观验收。保留基准截图后再移除原资产。
-- 若参考预算导致可见造型退化，优先增加所需几何细节，再记录模型面数与场景开销；先验证外观，再决定是否进一步减面。
-- 检查：物体是否浮空或陷入地面、是否落在凸点上、90° 旋转后是否仍对齐、biomeTints 下颜色是否正确、实例色调色板是否生效、阴影是否正常。
-- 控制台不应出现 `has no mesh matching instance color suffix` 或 `exceeded capacity` 新警告。
+- `pnpm dev` + `#debug`, compare triangles, draw calls, and frame time with the Phase 0 fixed seed and camera.
+- Against the original GLB's common and close-up angled camera positions, check silhouette, proportions, leaf/branch counts, gaps, thickness, rounded edges, material highlights, and shadows; passing a bounding-box size check does not substitute for visual acceptance. Keep baseline screenshots before removing original assets.
+- If a reference budget degrades visible shape, prioritize adding the needed geometric detail, then record model face count and scene cost; verify appearance first, then decide whether to simplify further.
+- Check: objects floating or sunk into the ground, whether they land on studs, whether they still align after 90° rotation, whether colors are correct under biomeTints, whether the instance-color palette applies, and whether shadows are normal.
+- The console should show no new `has no mesh matching instance color suffix` or `exceeded capacity` warnings.
 
-## 6. 风险与对策
+## 6. Risks and Countermeasures
 
-| 风险 | 对策 |
+| Risk | Countermeasure |
 |---|---|
-| 程序模型风格与现有 GLB / 地形砖不统一 | 统一用 `prefabParts.js` 的 LEGO 单位、凸点与 `createLegoMaterial` 塑料参数；试点先只做花，确认风格后再推广 |
-| Physical 材质使 prefab 着色变重 | Phase 0 基线对比帧时间；prefab 屏幕占比小，预期影响有限 |
-| 原点偏移导致悬空/穿插 | 测试断言 `min.y` 与 XZ 中心 |
-| 共享材质被调色逻辑误改 | 调色逻辑本就克隆材质；测试中验证 builder 材质在 `resolvePrefabMaterial` 后未被修改 |
-| 变体或 mesh 过多导致 draw call 增加 | 变体 ≤ 3、mesh ≤ 2，Phase 0 基线对比 draw calls |
-| 迁移中途新旧混用 | `source` 与 `builder` 可在同一 manifest 共存，每个 prefab 独立切换、独立回滚 |
+| Procedural models' style doesn't match existing GLBs / terrain bricks | Use `prefabParts.js` LEGO units, studs, and `createLegoMaterial` plastic parameters uniformly; pilot only the flower first, confirm the style, then scale up |
+| Physical materials make prefabs look heavier | Phase 0 baseline compares frame time; prefabs occupy a small screen share, expected impact is limited |
+| Origin offset causes floating/intersection | Tests assert `min.y` and XZ center |
+| Shared materials wrongly modified by tint logic | Tint logic already clones materials; tests verify builder materials are unmodified after `resolvePrefabMaterial` |
+| Too many variants or meshes raising draw calls | Variants ≤ 3, meshes ≤ 2, Phase 0 baseline compares draw calls |
+| Old and new mixed mid-migration | `source` and `builder` can coexist in the same manifest; each prefab switches and rolls back independently |
 
-## 7. 交付物清单
+## 7. Deliverables Checklist
 
 - `src/world/prefabs/builders/prefabParts.js`
-- `src/world/prefabs/builders/index.js` 与各 prefab 构建文件
-- `src/world/prefabs/PrefabRegistry.js`（builder 分支、缓存、`dispose`）
-- `src/world/world.js`（`dispose` 中释放 registry）
-- `src/assets/manifests/biomePrefabs.js`、`src/assets/sources.js`（逐项切换与删除）
+- `src/world/prefabs/builders/index.js` and each prefab builder file
+- `src/world/prefabs/PrefabRegistry.js` (builder branch, cache, `dispose`)
+- `src/world/world.js` (release registry in `dispose`)
+- `src/assets/manifests/biomePrefabs.js`, `src/assets/sources.js` (switch and delete item by item)
 - `test/prefabBuilders.test.js`
-- 删除已迁移及未使用的 GLB 文件
+- Delete migrated and unused GLB files
