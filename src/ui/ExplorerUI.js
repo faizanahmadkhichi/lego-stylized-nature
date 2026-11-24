@@ -56,7 +56,7 @@ export default class ExplorerUI {
         <div class="header-tools">
           <span class="explore-badge hud-part"><i></i><span data-flight-status>Free Exploration</span></span>
           <nav class="surface action-bar" aria-label="Exploration tools">
-            ${button('pause', 'pause', 'Pause flight (Space)', 'aria-pressed="false" disabled')}
+            ${button('pause', 'pause', 'Pause flight (P)', 'aria-pressed="false" disabled')}
             ${button('home', 'home', 'Return to start', 'disabled')}
             <span class="tool-divider"></span>
             ${button('sound', 'sound', 'Mute sound (M)', 'aria-pressed="false"')}
@@ -100,7 +100,8 @@ export default class ExplorerUI {
           <div><dt><kbd>S</kbd> / <kbd>↓</kbd></dt><dd>Reverse thrust</dd></div>
           <div><dt><kbd>A</kbd> / <kbd>←</kbd></dt><dd>Turn left</dd></div>
           <div><dt><kbd>D</kbd> / <kbd>→</kbd></dt><dd>Turn right</dd></div>
-          <div><dt><kbd>Space</kbd></dt><dd>Pause / resume flight</dd></div>
+          <div><dt><kbd>Space</kbd></dt><dd>Fire bolts</dd></div>
+          <div><dt><kbd>P</kbd></dt><dd>Pause / resume flight</dd></div>
           <div><dt><kbd>H</kbd> / <kbd>M</kbd></dt><dd>Toggle interface / sound</dd></div>
           <div><dt>Minimap top-right / <kbd>Esc</kbd></dt><dd>Expand / collapse map</dd></div>
         </dl>
@@ -204,7 +205,7 @@ export default class ExplorerUI {
     this.syncTouchControls()
     const control = this.root.querySelector('[data-action="pause"]')
     control.setAttribute('aria-pressed', String(this.flightPaused))
-    control.setAttribute('aria-label', this.flightPaused ? 'Resume flight (Space)' : 'Pause flight (Space)')
+    control.setAttribute('aria-label', this.flightPaused ? 'Resume flight (P)' : 'Pause flight (P)')
     control.title = control.getAttribute('aria-label')
     control.innerHTML = svg(this.flightPaused ? 'play' : 'pause')
     this.root.querySelector('[data-flight-status]').textContent = !player?.enabled ? 'Scenic cruise' : this.flightPaused ? 'Flight paused' : 'Free Exploration'
@@ -269,7 +270,7 @@ export default class ExplorerUI {
       return
     }
     const interactive = event.target.closest('button, a')
-    const action = event.code === 'KeyH' ? 'cinema' : event.code === 'KeyM' ? 'sound' : event.code === 'Space' && !interactive ? 'pause' : event.key === '?' ? 'help' : null
+    const action = event.code === 'KeyH' ? 'cinema' : event.code === 'KeyM' ? 'sound' : event.code === 'KeyP' && !interactive ? 'pause' : event.key === '?' ? 'help' : null
     if (action) {
       event.preventDefault()
       event.stopPropagation()
