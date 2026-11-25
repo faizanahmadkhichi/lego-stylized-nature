@@ -81,7 +81,7 @@ export default class ExplorerUI {
       <aside class="surface map-card hud-part flight-panel" aria-label="Nearby terrain minimap">
         <div class="map-heading"><div><span>A corner of the wilds</span><span class="eyebrow">LOCAL MAP</span></div><button type="button" class="map-expand" data-action="map" aria-label="Enlarge minimap" title="Enlarge minimap" aria-expanded="false">${svg('fullscreen')}</button></div>
         <canvas class="terrain-minimap" aria-label="Explored terrain and flight direction"></canvas>
-        <div class="map-footer"><span><i></i> Your position</span><span data-seed></span></div>
+        <div class="map-footer"><span><i></i> You</span><span><i class="target-drone"></i> Drone</span><span><i class="target-balloon"></i> Balloon</span><span data-seed></span></div>
       </aside>
       <div class="surface flight-joystick hud-part flight-panel" data-flight-joystick role="group" aria-label="Flight joystick — drag in the direction you want to fly" hidden>
         <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" aria-hidden="true">
