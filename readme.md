@@ -2,9 +2,12 @@
 
 A little adventure with no finish line. Fly a brick-built plane through a procedural world of forests, rivers, dunes, and snow.
 
-[![A brick-built plane above the forest and riverbank](docs/readmeImg/optimized/hero.webp)](https://lego-stylized-nature.vercel.app/)
+> **中文说明：** 本仓库原为中文项目，现已全部翻译为英文，并改造成了一款游戏 —— 驾驶积木飞机开火，射击移动目标，完成关卡。
+> *(This repo was originally a Chinese project. It has been fully translated into English and turned into a game — fly a brick plane, fire bolts, shoot moving targets, and complete levels.)*
 
-**[Explore live ↗](https://lego-stylized-nature.vercel.app/)** · **[Play on Cloudflare Pages ↗](https://lego-stylized-nature.pages.dev)** · [Watch the flight](docs/readmeImg/optimized/flight-demo.mp4)
+[![A brick-built plane above the forest and riverbank](docs/readmeImg/optimized/hero.webp)](https://lego-stylized-nature.pages.dev/)
+
+**[Play live ↗](https://lego-stylized-nature.pages.dev)** · [Watch the flight](docs/readmeImg/optimized/flight-demo.mp4)
 
 ## Take flight
 
@@ -76,7 +79,8 @@ For the best experience, use a recent desktop browser with WebGPU support and ha
 | `A` / `←` | Turn left |
 | `D` / `→` | Turn right |
 | Touch joystick (bottom left) | Fly in the direction you push |
-| `Space` | Pause / resume flight |
+| `Space` | Fire bolts |
+| `P` | Pause / resume flight |
 | `H` | Hide / show the HUD |
 | `M` | Toggle sound |
 | Map expand button (top-right of minimap) | Expand / collapse the map |
