@@ -105,3 +105,82 @@ test('minimap follows its displayed size when expanded and collapsed', () => {
   assert.equal(canvas.height, Math.round(140 * minimap.dpr))
   minimap.dispose()
 })
+
+function makeTargetExperience(position, targets) {
+  const experience = makeExperience(position)
+  experience.world.targets = { aliveTargets: targets }
+  return experience
+}
+
+test('worldToMap centers the player and scales by worldPerPixel', () => {
+  const minimap = new TerrainMinimap(makeCanvas(), makeExperience({ x: 0, z: 0 }))
+  minimap.update()
+  // span = max(32, 4 * 1.8) * 2 = 64 world units across 248 px.
+  const worldPerPixel = 64 / 248
+  assert.deepEqual(
+    minimap.worldToMap(2, 0, { x: 0, z: 0 }),
+    { x: 124 + 2 / worldPerPixel, y: 90 },
+  )
+  assert.deepEqual(
+    minimap.worldToMap(0, -4, { x: 0, z: 0 }),
+    { x: 124, y: 90 - 4 / worldPerPixel },
+  )
+})
+
+test('a balloon in view is drawn as a circle at its map position', () => {
+  const canvas = makeCanvas()
+  const experience = makeTargetExperience({ x: 0, z: 0 }, [
+    { type: 'balloon', position: { x: 2, z: 0 } },
+  ])
+  const minimap = new TerrainMinimap(canvas, experience)
+  minimap.update()
+  const worldPerPixel = 64 / 248
+  const expectedX = 124 + 2 / worldPerPixel
+  const arc = canvas.calls.find(call => call[0] === 'arc')
+  assert.ok(arc, 'expected a circle marker for the balloon')
+  assert.equal(arc[1], expectedX)
+  assert.equal(arc[2], 90)
+  assert.equal(arc[3], 4)
+})
+
+test('a drone in view is drawn as a diamond at its map position', () => {
+  const canvas = makeCanvas()
+  const experience = makeTargetExperience({ x: 0, z: 0 }, [
+    { type: 'drone', position: { x: 0, z: 2 } },
+  ])
+  const minimap = new TerrainMinimap(canvas, experience)
+  minimap.update()
+  const worldPerPixel = 64 / 248
+  const expectedY = 90 + 2 / worldPerPixel
+  // Diamond tip above the center; the plane arrow uses moveTo(8, 0) instead.
+  assert.ok(canvas.calls.some(call => call[0] === 'moveTo'
+    && call[1] === 124 && call[2] === expectedY - 5))
+  assert.ok(canvas.calls.some(call => call[0] === 'lineTo'
+    && call[1] === 129 && call[2] === expectedY))
+})
+
+test('a target off the map is drawn as an edge arrow pointing at it', () => {
+  const canvas = makeCanvas()
+  const experience = makeTargetExperience({ x: 0, z: 0 }, [
+    { type: 'drone', position: { x: 30, z: 30 } },
+  ])
+  const minimap = new TerrainMinimap(canvas, experience)
+  minimap.update()
+  // Clamped to the bottom-right corner inset (248-10, 180-10); the arrow
+  // points diagonally down-right, i.e. rotate(PI/4). The plane arrow (yaw 0)
+  // rotates by 0, so PI/4 is unique to the target arrow.
+  assert.ok(canvas.calls.some(call => call[0] === 'translate'
+    && call[1] === 238 && call[2] === 170))
+  assert.ok(canvas.calls.some(call => call[0] === 'rotate'
+    && call[1] === Math.PI / 4))
+})
+
+test('no targets means no target markers', () => {
+  const canvas = makeCanvas()
+  const minimap = new TerrainMinimap(canvas, makeExperience({ x: 0, z: 0 }))
+  minimap.update()
+  assert.equal(canvas.calls.filter(call => call[0] === 'arc').length, 0)
+  // Only the plane arrow rotates (yaw 0 here).
+  const rotates = canvas.calls.filter(call => call[0] === 'rotate')
+  assert.deepEqual(rotates, [['rotate', 0]])
+})
