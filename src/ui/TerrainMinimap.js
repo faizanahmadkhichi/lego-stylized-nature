@@ -15,6 +15,14 @@ const BIOME_COLORS = {
   wetland: [109, 156, 138],
 }
 
+/** Target marker colors, matching the 3D targets. */
+const TARGET_COLORS = {
+  drone: '#e2483a',
+  balloon: '#ff6fa5',
+}
+/** Markers stay this far inside the canvas edge. */
+const MARKER_MARGIN = 10
+
 function getMapBounds(map) {
   const halo = map.halo ?? 0
   const width = map.heightField?.width ?? map.surfaceCells?.[0]?.length ?? 0
@@ -106,6 +114,73 @@ export default class TerrainMinimap {
     this.lastRefresh = -Infinity
   }
 
+  /** World (x, z) → canvas pixels, centered on the player. */
+  worldToMap(worldX, worldZ, position) {
+    return {
+      x: this.width / 2 + (worldX - position.x) / this.worldPerPixel,
+      y: this.height / 2 + (worldZ - position.z) / this.worldPerPixel,
+    }
+  }
+
+  /** Draws every alive target: a marker in view, or an edge arrow pointing at it. */
+  drawTargetMarkers(context, position) {
+    const targets = this.experience.world?.targets?.aliveTargets
+    if (!targets || targets.length === 0) {
+      return
+    }
+    const margin = MARKER_MARGIN
+    for (const target of targets) {
+      const color = TARGET_COLORS[target.type] ?? TARGET_COLORS.drone
+      const point = this.worldToMap(target.position.x, target.position.z, position)
+      const inView = point.x >= margin && point.x <= this.width - margin
+        && point.y >= margin && point.y <= this.height - margin
+      context.save()
+      if (inView) {
+        this._drawTargetDot(context, point, target.type, color)
+      }
+      else {
+        // Clamp to the edge and point an arrow toward the target, radar-style.
+        const clampedX = Math.max(margin, Math.min(this.width - margin, point.x))
+        const clampedY = Math.max(margin, Math.min(this.height - margin, point.y))
+        const angle = Math.atan2(point.y - this.height / 2, point.x - this.width / 2)
+        context.translate(clampedX, clampedY)
+        context.rotate(angle)
+        context.beginPath()
+        context.moveTo(7, 0)
+        context.lineTo(-5, -5)
+        context.lineTo(-5, 5)
+        context.closePath()
+        context.fillStyle = color
+        context.fill()
+        context.strokeStyle = '#ffffff'
+        context.lineWidth = 1.5
+        context.stroke()
+      }
+      context.restore()
+    }
+  }
+
+  _drawTargetDot(context, point, type, color) {
+    context.beginPath()
+    if (type === 'drone') {
+      // Diamond.
+      context.moveTo(point.x, point.y - 5)
+      context.lineTo(point.x + 5, point.y)
+      context.lineTo(point.x, point.y + 5)
+      context.lineTo(point.x - 5, point.y)
+      context.closePath()
+    }
+    else {
+      // Circle.
+      context.arc(point.x, point.y, 4, 0, Math.PI * 2)
+    }
+    context.fillStyle = color
+    context.fill()
+    context.strokeStyle = '#ffffff'
+    context.lineWidth = 1.5
+    context.stroke()
+  }
+
   getCurrentBiomeId() {
     const world = this.experience.world
     const position = world?.playerAircraft?.state?.position
@@ -189,6 +264,8 @@ export default class TerrainMinimap {
       context.lineTo(this.width, y)
     }
     context.stroke()
+
+    this.drawTargetMarkers(context, position)
 
     context.fillStyle = '#f9f4df'
     context.font = '600 9px system-ui, sans-serif'
